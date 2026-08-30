@@ -1,89 +1,136 @@
-export const DEMO_ADMIN_EMAIL =
-  "admin@cargotrack.ph";
+import type { User } from "@supabase/supabase-js";
 
-export const DEMO_ADMIN_PASSWORD =
-  "Admin123!";
-
-const ADMIN_AUTH_KEY =
-  "cargo-track-admin-auth-v1";
+import { supabase } from "./lib/supabase";
 
 export type AdminSession = {
   authenticated: true;
+  userId: string;
   name: string;
   email: string;
   role: "System Administrator";
   loggedInAt: string;
 };
 
-export function validateDemoAdmin(
+export async function getAdminSessionForUser(
+  user: User | null
+): Promise<AdminSession | null> {
+  if (!user) {
+    return null;
+  }
+
+  const { data: profile, error } =
+    await supabase
+      .from("profiles")
+      .select(
+        `
+          id,
+          email,
+          full_name,
+          role,
+          account_status
+        `
+      )
+      .eq("id", user.id)
+      .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      "Unable to verify the administrator profile."
+    );
+  }
+
+  if (
+    !profile ||
+    profile.role !== "admin" ||
+    profile.account_status !== "active"
+  ) {
+    return null;
+  }
+
+  return {
+    authenticated: true,
+    userId: user.id,
+    name:
+      profile.full_name ||
+      "Administrator",
+    email:
+      profile.email ||
+      user.email ||
+      "",
+    role: "System Administrator",
+    loggedInAt:
+      user.last_sign_in_at ||
+      new Date().toISOString(),
+  };
+}
+
+export async function signInAdmin(
   email: string,
   password: string
-) {
-  return (
-    email.trim().toLowerCase() ===
-      DEMO_ADMIN_EMAIL &&
-    password === DEMO_ADMIN_PASSWORD
+): Promise<AdminSession> {
+  const { data, error } =
+    await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+  if (error) {
+  console.error(
+    "Supabase login error:",
+    error
+  );
+
+  throw new Error(error.message);
+}
+
+if (!data.user) {
+  throw new Error(
+    "Supabase did not return a user account."
   );
 }
 
-export function signInAdmin() {
-  const session: AdminSession = {
-    authenticated: true,
-    name: "Administrator",
-    email: DEMO_ADMIN_EMAIL,
-    role: "System Administrator",
-    loggedInAt: new Date().toISOString(),
-  };
+  const admin =
+    await getAdminSessionForUser(data.user);
 
-  window.localStorage.setItem(
-    ADMIN_AUTH_KEY,
-    JSON.stringify(session)
-  );
+  if (!admin) {
+    await supabase.auth.signOut();
 
-  return session;
+    throw new Error(
+      "This account is not authorized to access the Admin Portal."
+    );
+  }
+
+  return admin;
 }
 
-export function getAdminSession():
-  | AdminSession
-  | null {
-  if (typeof window === "undefined") {
+export async function getAdminSession():
+  Promise<AdminSession | null> {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error) {
     return null;
   }
 
-  try {
-    const raw =
-      window.localStorage.getItem(
-        ADMIN_AUTH_KEY
-      );
+  const admin =
+    await getAdminSessionForUser(user);
 
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(
-      raw
-    ) as Partial<AdminSession>;
-
-    if (
-      parsed.authenticated !== true ||
-      !parsed.email ||
-      !parsed.name
-    ) {
-      return null;
-    }
-
-    return parsed as AdminSession;
-  } catch {
-    return null;
+  if (user && !admin) {
+    await supabase.auth.signOut();
   }
+
+  return admin;
 }
 
-export function isAdminAuthenticated() {
-  return getAdminSession() !== null;
-}
+export async function signOutAdmin() {
+  const { error } =
+    await supabase.auth.signOut();
 
-export function signOutAdmin() {
-  window.localStorage.removeItem(
-    ADMIN_AUTH_KEY
-  );
+  if (error) {
+    throw new Error(
+      "Unable to sign out. Please try again."
+    );
+  }
 }

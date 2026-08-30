@@ -15,28 +15,54 @@ import {
 } from "react-router-dom";
 
 import {
-  DEMO_ADMIN_EMAIL,
-  DEMO_ADMIN_PASSWORD,
-  isAdminAuthenticated,
-  signInAdmin,
-  validateDemoAdmin,
-} from "../adminAuth";
+  useAdminAuth,
+} from "../contexts/AdminAuthContext";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
+  const {
+    admin,
+    loading,
+    signIn,
+  } = useAdminAuth();
+
+  const [email, setEmail] =
+    useState("");
+
   const [password, setPassword] =
     useState("");
+
   const [showPassword, setShowPassword] =
     useState(false);
-  const [error, setError] = useState("");
 
-  if (isAdminAuthenticated()) {
+  const [error, setError] =
+    useState("");
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          color: "#123b5d",
+          fontWeight: 700,
+        }}
+      >
+        Checking administrator access...
+      </div>
+    );
+  }
+
+  if (admin) {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = (
+  const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
@@ -49,23 +75,23 @@ export default function AdminLogin() {
       return;
     }
 
-    if (
-      !validateDemoAdmin(email, password)
-    ) {
+    try {
+      setIsSubmitting(true);
+
+      await signIn(email, password);
+
+      navigate("/", {
+        replace: true,
+      });
+    } catch (signInError) {
       setError(
-        "The email or password is incorrect. Use the prototype credentials shown below."
+        signInError instanceof Error
+          ? signInError.message
+          : "Unable to sign in. Please try again."
       );
-      return;
+    } finally {
+      setIsSubmitting(false);
     }
-
-    signInAdmin();
-    navigate("/", { replace: true });
-  };
-
-  const fillDemoCredentials = () => {
-    setEmail(DEMO_ADMIN_EMAIL);
-    setPassword(DEMO_ADMIN_PASSWORD);
-    setError("");
   };
 
   return (
@@ -84,7 +110,8 @@ export default function AdminLogin() {
           </div>
 
           <h1>
-            Manage Cargo Track PH with confidence.
+            Manage Cargo Track PH with
+            confidence.
           </h1>
 
           <p>
@@ -113,7 +140,7 @@ export default function AdminLogin() {
         </div>
 
         <div className="admin-login-brand-footer">
-          Prototype administration environment
+          Secure administration environment
         </div>
       </section>
 
@@ -151,6 +178,7 @@ export default function AdminLogin() {
                 value={email}
                 autoComplete="username"
                 placeholder="Enter admin email"
+                disabled={isSubmitting}
                 onChange={(event) => {
                   setEmail(event.target.value);
                   setError("");
@@ -178,6 +206,7 @@ export default function AdminLogin() {
                 value={password}
                 autoComplete="current-password"
                 placeholder="Enter admin password"
+                disabled={isSubmitting}
                 onChange={(event) => {
                   setPassword(event.target.value);
                   setError("");
@@ -187,6 +216,7 @@ export default function AdminLogin() {
               <button
                 type="button"
                 className="admin-password-toggle"
+                disabled={isSubmitting}
                 onClick={() =>
                   setShowPassword(
                     (current) => !current
@@ -216,43 +246,42 @@ export default function AdminLogin() {
             <button
               type="submit"
               className="admin-login-submit"
+              disabled={isSubmitting}
             >
               <ShieldCheck size={19} />
-              Sign In to Admin Portal
+
+              {isSubmitting
+                ? "Signing in..."
+                : "Sign In to Admin Portal"}
             </button>
           </form>
 
           <div className="admin-demo-credentials">
             <div>
-              <strong>Prototype credentials</strong>
+              <strong>
+                Secure administrator access
+              </strong>
+
               <span>
-                Use these details for the admin demo.
+                Only verified and active admin
+                accounts can access this portal.
               </span>
             </div>
 
             <div className="admin-demo-row">
-              <span>Email</span>
-              <code>{DEMO_ADMIN_EMAIL}</code>
+              <span>Authentication</span>
+              <code>Supabase Auth</code>
             </div>
 
             <div className="admin-demo-row">
-              <span>Password</span>
-              <code>{DEMO_ADMIN_PASSWORD}</code>
+              <span>Access level</span>
+              <code>Administrator only</code>
             </div>
-
-            <button
-              type="button"
-              className="admin-fill-demo-button"
-              onClick={fillDemoCredentials}
-            >
-              Fill Demo Credentials
-            </button>
           </div>
 
           <div className="admin-login-note">
-            Prototype only: authentication is stored
-            locally in this browser. Supabase Auth will
-            replace it during backend integration.
+            Authentication and sessions are securely
+            managed through Supabase.
           </div>
         </div>
       </section>

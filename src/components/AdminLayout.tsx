@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Bell,
   BriefcaseBusiness,
@@ -12,12 +12,12 @@ import {
 import {
   NavLink,
   Outlet,
+  useNavigate,
 } from "react-router-dom";
 
 import {
-  getAdminSession,
-  signOutAdmin,
-} from "../adminAuth";
+  useAdminAuth,
+} from "../contexts/AdminAuthContext";
 
 const navItems = [
   {
@@ -47,71 +47,25 @@ const navItems = [
   },
 ];
 
-const APPLICATIONS_STORAGE_KEY =
-  "cargo-track-admin-business-applications-v1";
-
-const SPONSORED_STORAGE_KEY =
-  "cargo-track-admin-sponsored-listings-v1";
-
-function countPending(storageKey: string, fallback: number) {
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-
-    if (!raw) return fallback;
-
-    const items = JSON.parse(raw);
-
-    if (!Array.isArray(items)) return fallback;
-
-    return items.filter((item) => item?.status === "Pending").length;
-  } catch {
-    return fallback;
-  }
-}
-
-function readBadgeCounts() {
-  return {
-    applications: countPending(APPLICATIONS_STORAGE_KEY, 1),
-    sponsored: countPending(SPONSORED_STORAGE_KEY, 1),
-  };
-}
-
 export default function AdminLayout() {
-  const admin = getAdminSession();
-  const [badgeCounts, setBadgeCounts] = useState(readBadgeCounts);
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    const refreshBadgeCounts = () => {
-      const next = readBadgeCounts();
+  const {
+    admin,
+    signOut,
+  } = useAdminAuth();
 
-      setBadgeCounts((current) =>
-        current.applications === next.applications &&
-        current.sponsored === next.sponsored
-          ? current
-          : next
-      );
-    };
-
-    refreshBadgeCounts();
-
-    window.addEventListener("storage", refreshBadgeCounts);
-    window.addEventListener("focus", refreshBadgeCounts);
-
-    const intervalId = window.setInterval(refreshBadgeCounts, 1000);
-
-    return () => {
-      window.removeEventListener("storage", refreshBadgeCounts);
-      window.removeEventListener("focus", refreshBadgeCounts);
-      window.clearInterval(intervalId);
-    };
-  }, []);
+  const [isLoggingOut, setIsLoggingOut] =
+    useState(false);
 
   const adminName =
     admin?.name || "Administrator";
-  const adminRole =
-    admin?.role || "System Administrator";
 
-  const handleLogout = () => {
+  const adminRole =
+    admin?.role ||
+    "System Administrator";
+
+  const handleLogout = async () => {
     const confirmed = window.confirm(
       "Are you sure you want to log out of the Admin Portal?"
     );
@@ -120,19 +74,34 @@ export default function AdminLayout() {
       return;
     }
 
-    signOutAdmin();
-    window.location.replace("/login");
+    try {
+      setIsLoggingOut(true);
+
+      await signOut();
+
+      navigate("/login", {
+        replace: true,
+      });
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to log out. Please try again."
+      );
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const showNotificationsNotice = () => {
     window.alert(
-      "Admin notifications will be added in a later prototype update."
+      "Admin notifications will be added in a later update."
     );
   };
 
   return (
     <div className="admin-shell">
-      <aside className="sidebar" style={{ zIndex: 1100 }}>
+      <aside className="sidebar">
         <div className="brand">
           <img
             src="/cargo.png"
@@ -145,7 +114,9 @@ export default function AdminLayout() {
           </div>
         </div>
 
-        <div className="sidebar-label">MENU</div>
+        <div className="sidebar-label">
+          MENU
+        </div>
 
         <nav className="sidebar-nav">
           {navItems.map((item) => {
@@ -156,29 +127,31 @@ export default function AdminLayout() {
                 key={item.path}
                 to={item.path}
                 end={item.path === "/"}
-                className={({ isActive }) =>
+                className={({
+                  isActive,
+                }) =>
                   `nav-item ${
                     isActive ? "active" : ""
                   }`
                 }
               >
                 <Icon size={20} />
+
                 <span>{item.label}</span>
 
-                {item.label === "Applications" &&
-                  badgeCounts.applications > 0 && (
-                    <span className="nav-badge">
-                      {badgeCounts.applications}
-                    </span>
-                  )}
+                {item.label ===
+                  "Applications" && (
+                  <span className="nav-badge">
+                    3
+                  </span>
+                )}
 
                 {item.label ===
-                  "Sponsored Listings" &&
-                  badgeCounts.sponsored > 0 && (
-                    <span className="nav-badge">
-                      {badgeCounts.sponsored}
-                    </span>
-                  )}
+                  "Sponsored Listings" && (
+                  <span className="nav-badge">
+                    1
+                  </span>
+                )}
               </NavLink>
             );
           })}
@@ -186,7 +159,9 @@ export default function AdminLayout() {
 
         <div className="sidebar-bottom">
           <div className="admin-mini-profile">
-            <div className="admin-mini-avatar">AD</div>
+            <div className="admin-mini-avatar">
+              AD
+            </div>
 
             <div>
               <strong>{adminName}</strong>
@@ -198,9 +173,13 @@ export default function AdminLayout() {
             type="button"
             className="logout-button"
             onClick={handleLogout}
+            disabled={isLoggingOut}
           >
             <LogOut size={18} />
-            Logout
+
+            {isLoggingOut
+              ? "Logging out..."
+              : "Logout"}
           </button>
         </div>
       </aside>
@@ -209,7 +188,9 @@ export default function AdminLayout() {
         <header className="topbar">
           <div className="top-search">
             <Search size={18} />
+
             <input
+              type="search"
               placeholder="Search Cargo Track PH..."
               aria-label="Search Cargo Track PH"
             />
@@ -219,7 +200,9 @@ export default function AdminLayout() {
             <button
               type="button"
               className="notification-button"
-              onClick={showNotificationsNotice}
+              onClick={
+                showNotificationsNotice
+              }
               aria-label="Admin notifications"
             >
               <Bell size={20} />
@@ -227,7 +210,9 @@ export default function AdminLayout() {
             </button>
 
             <div className="top-admin">
-              <div className="top-admin-avatar">AD</div>
+              <div className="top-admin-avatar">
+                AD
+              </div>
 
               <div>
                 <strong>{adminName}</strong>
