@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type { ReactNode } from "react";
+import {
+  AlertCircle,
   Ban,
   BriefcaseBusiness,
   CheckCircle2,
   Eye,
   Mail,
   Phone,
+  RefreshCw,
   Search,
   ShieldCheck,
   UserRound,
@@ -13,12 +21,14 @@ import {
   X,
 } from "lucide-react";
 
+import { supabase } from "../lib/supabase";
+
 type UserRole = "Customer" | "Business";
 type UserStatus = "Active" | "Disabled";
 
 type User = {
   id: string;
-  sourceApplicationId?: string;
+  displayId: string;
   name: string;
   email: string;
   phone: string;
@@ -28,251 +38,377 @@ type User = {
   businessName?: string;
 };
 
-type ApprovedApplication = {
+type ProfileRow = {
   id: string;
-  businessName: string;
-  representativeName: string;
-  email: string;
-  phone: string;
-  status: "Pending" | "Approved" | "Rejected";
-  submittedAt: string;
-  reviewedAt?: string;
+  email: string | null;
+  full_name: string;
+  phone: string | null;
+  role: "customer" | "business";
+  account_status: "active" | "suspended";
+  created_at: string;
 };
 
-const USERS_STORAGE_KEY =
-  "cargo-track-admin-users-v1";
+type BusinessRow = {
+  owner_id: string;
+  name: string;
+};
 
-const APPLICATIONS_STORAGE_KEY =
-  "cargo-track-admin-business-applications-v1";
+const roleFilters = [
+  "All",
+  "Customer",
+  "Business",
+] as const;
 
-const initialUsers: User[] = [
-  {
-    id: "USR-001",
-    name: "Juan Dela Cruz",
-    email: "juan@gmail.com",
-    phone: "0917 123 4567",
-    role: "Customer",
-    status: "Active",
-    joined: "Aug 22, 2026",
-  },
-  {
-    id: "USR-002",
-    name: "Maria Santos",
-    email: "maria@gmail.com",
-    phone: "0918 234 5678",
-    role: "Customer",
-    status: "Active",
-    joined: "Aug 21, 2026",
-  },
-  {
-    id: "USR-003",
-    name: "Michael Santos",
-    email: "abccargo@example.com",
-    phone: "0917 123 4567",
-    role: "Business",
-    status: "Active",
-    joined: "Aug 20, 2026",
-    businessName: "ABC Cargo Express",
-  },
-  {
-    id: "USR-004",
-    name: "Leonardo Cruz",
-    email: "xyzcargo@example.com",
-    phone: "0918 222 3344",
-    role: "Business",
-    status: "Active",
-    joined: "Aug 18, 2026",
-    businessName: "XYZ Cargo Services",
-  },
-  {
-    id: "USR-005",
-    name: "Andrea Reyes",
-    email: "palawancargo@example.com",
-    phone: "0919 333 4455",
-    role: "Business",
-    status: "Disabled",
-    joined: "Aug 16, 2026",
-    businessName: "Palawan Cargo Lines",
-  },
-];
+type RoleFilter =
+  (typeof roleFilters)[number];
 
-function formatJoinedDate(value?: string) {
-  if (!value) return "—";
+function createDisplayId(id: string) {
+  const shortId = id
+    .replace(/-/g, "")
+    .slice(0, 8)
+    .toUpperCase();
 
+  return `USR-${shortId}`;
+}
+
+function formatJoinedDate(value: string) {
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
-
-function readApprovedApplications(): ApprovedApplication[] {
-  try {
-    const raw = window.localStorage.getItem(
-      APPLICATIONS_STORAGE_KEY
-    );
-
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) return [];
-
-    return (parsed as ApprovedApplication[]).filter(
-      (application) => application.status === "Approved"
-    );
-  } catch {
-    return [];
-  }
-}
-
-function applicationToUser(application: ApprovedApplication): User {
-  return {
-    id: `USR-${application.id.replace(/^APP-/, "")}`,
-    sourceApplicationId: application.id,
-    name: application.representativeName,
-    email: application.email,
-    phone: application.phone,
-    role: "Business",
-    status: "Active",
-    joined: formatJoinedDate(
-      application.reviewedAt || application.submittedAt
-    ),
-    businessName: application.businessName,
-  };
-}
-
-function loadUsers(): User[] {
-  let storedUsers = initialUsers;
-
-  try {
-    const raw = window.localStorage.getItem(USERS_STORAGE_KEY);
-
-    if (raw) {
-      const parsed = JSON.parse(raw);
-
-      if (Array.isArray(parsed)) {
-        storedUsers = parsed as User[];
-      }
-    }
-  } catch {
-    storedUsers = initialUsers;
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
   }
 
-  const approvedApplications = readApprovedApplications();
-  const approvedIds = new Set(
-    approvedApplications.map((application) => application.id)
-  );
-
-  const syncedUsers = storedUsers.filter(
-    (user) =>
-      !user.sourceApplicationId ||
-      approvedIds.has(user.sourceApplicationId)
-  );
-
-  approvedApplications.forEach((application) => {
-    const existingIndex = syncedUsers.findIndex(
-      (user) => user.sourceApplicationId === application.id
-    );
-
-    const applicationUser = applicationToUser(application);
-
-    if (existingIndex === -1) {
-      syncedUsers.push(applicationUser);
-      return;
+  return new Intl.DateTimeFormat(
+    "en-PH",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     }
-
-    syncedUsers[existingIndex] = {
-      ...applicationUser,
-      status: syncedUsers[existingIndex].status,
-    };
-  });
-
-  return syncedUsers;
+  ).format(date);
 }
-
-const roleFilters = ["All", "Customer", "Business"] as const;
-type RoleFilter = (typeof roleFilters)[number];
 
 export default function Users() {
-  const [users, setUsers] = useState<User[]>(() => loadUsers());
-  const [search, setSearch] = useState("");
+  const [users, setUsers] =
+    useState<User[]>([]);
+
+  const [search, setSearch] =
+    useState("");
+
   const [selectedRole, setSelectedRole] =
     useState<RoleFilter>("All");
+
   const [selectedUser, setSelectedUser] =
     useState<User | null>(null);
 
+  const [loading, setLoading] =
+    useState(true);
+
+  const [pageError, setPageError] =
+    useState("");
+
+  const [statusError, setStatusError] =
+    useState("");
+
+  const [
+    isUpdatingStatus,
+    setIsUpdatingStatus,
+  ] = useState(false);
+
+  const loadUsers =
+    useCallback(async () => {
+      try {
+        setLoading(true);
+        setPageError("");
+
+        const [
+          profileResult,
+          businessResult,
+        ] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select(
+              `
+                id,
+                email,
+                full_name,
+                phone,
+                role,
+                account_status,
+                created_at
+              `
+            )
+            .in("role", [
+              "customer",
+              "business",
+            ])
+            .order("created_at", {
+              ascending: false,
+            }),
+
+          supabase
+            .from("businesses")
+            .select("owner_id, name"),
+        ]);
+
+        if (profileResult.error) {
+          throw profileResult.error;
+        }
+
+        if (businessResult.error) {
+          throw businessResult.error;
+        }
+
+        const profiles =
+          (profileResult.data ??
+            []) as ProfileRow[];
+
+        const businesses =
+          (businessResult.data ??
+            []) as BusinessRow[];
+
+        const businessNamesByOwner =
+          new Map(
+            businesses.map((business) => [
+              business.owner_id,
+              business.name,
+            ])
+          );
+
+        const mappedUsers: User[] =
+          profiles.map((profile) => ({
+            id: profile.id,
+
+            displayId: createDisplayId(
+              profile.id
+            ),
+
+            name:
+              profile.full_name ||
+              profile.email?.split(
+                "@"
+              )[0] ||
+              "CargoTrackPH User",
+
+            email:
+              profile.email ||
+              "No email provided",
+
+            phone:
+              profile.phone ||
+              "Not provided",
+
+            role:
+              profile.role === "business"
+                ? "Business"
+                : "Customer",
+
+            status:
+              profile.account_status ===
+              "active"
+                ? "Active"
+                : "Disabled",
+
+            joined: formatJoinedDate(
+              profile.created_at
+            ),
+
+            businessName:
+              businessNamesByOwner.get(
+                profile.id
+              ),
+          }));
+
+        setUsers(mappedUsers);
+      } catch (error) {
+        console.error(
+          "Unable to load users:",
+          error
+        );
+
+        setPageError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load user accounts."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+
   useEffect(() => {
-    window.localStorage.setItem(
-      USERS_STORAGE_KEY,
-      JSON.stringify(users)
+    void loadUsers();
+  }, [loadUsers]);
+
+  const filteredUsers =
+    useMemo(() => {
+      const query =
+        search.trim().toLowerCase();
+
+      return users.filter((user) => {
+        const matchesRole =
+          selectedRole === "All" ||
+          user.role === selectedRole;
+
+        const matchesSearch =
+          !query ||
+          user.name
+            .toLowerCase()
+            .includes(query) ||
+          user.email
+            .toLowerCase()
+            .includes(query) ||
+          user.phone
+            .toLowerCase()
+            .includes(query) ||
+          user.businessName
+            ?.toLowerCase()
+            .includes(query);
+
+        return (
+          matchesRole &&
+          Boolean(matchesSearch)
+        );
+      });
+    }, [
+      users,
+      search,
+      selectedRole,
+    ]);
+
+  const customerCount =
+    users.filter(
+      (user) =>
+        user.role === "Customer"
+    ).length;
+
+  const businessCount =
+    users.filter(
+      (user) =>
+        user.role === "Business"
+    ).length;
+
+  const disabledCount =
+    users.filter(
+      (user) =>
+        user.status === "Disabled"
+    ).length;
+
+  const openUserDetails = (user: User) => {
+    setStatusError("");
+    setSelectedUser(user);
+  };
+
+  const closeUserDetails = () => {
+    if (isUpdatingStatus) {
+      return;
+    }
+
+    setStatusError("");
+    setSelectedUser(null);
+  };
+
+  const updateUserStatus = async (
+    status: UserStatus
+  ) => {
+    if (!selectedUser) {
+      return;
+    }
+
+    const actionLabel =
+      status === "Active"
+        ? "activate"
+        : "disable";
+
+    const confirmed = window.confirm(
+      `Are you sure you want to ${actionLabel} ${selectedUser.name}'s account?`
     );
-  }, [users]);
 
-  const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    if (!confirmed) {
+      return;
+    }
 
-    return users.filter((user) => {
-      const matchesRole =
-        selectedRole === "All" || user.role === selectedRole;
+    try {
+      setIsUpdatingStatus(true);
+      setStatusError("");
 
-      const matchesSearch =
-        !query ||
-        user.name.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        user.businessName?.toLowerCase().includes(query);
+      const databaseStatus =
+        status === "Active"
+          ? "active"
+          : "suspended";
 
-      return matchesRole && Boolean(matchesSearch);
-    });
-  }, [users, search, selectedRole]);
+      const { error } =
+        await supabase.rpc(
+          "set_user_account_status",
+          {
+            requested_user_id:
+              selectedUser.id,
 
-  const customerCount = users.filter(
-    (user) => user.role === "Customer"
-  ).length;
+            requested_status:
+              databaseStatus,
+          }
+        );
 
-  const businessCount = users.filter(
-    (user) => user.role === "Business"
-  ).length;
+      if (error) {
+        throw error;
+      }
 
-  const disabledCount = users.filter(
-    (user) => user.status === "Disabled"
-  ).length;
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === selectedUser.id
+            ? {
+                ...user,
+                status,
+              }
+            : user
+        )
+      );
 
-  const updateUserStatus = (status: UserStatus) => {
-    if (!selectedUser) return;
+      setSelectedUser((currentUser) =>
+        currentUser
+          ? {
+              ...currentUser,
+              status,
+            }
+          : null
+      );
+    } catch (error) {
+      console.error(
+        "Unable to update account:",
+        error
+      );
 
-    setUsers((current) =>
-      current.map((user) =>
-        user.id === selectedUser.id
-          ? { ...user, status }
-          : user
-      )
-    );
-
-    setSelectedUser({
-      ...selectedUser,
-      status,
-    });
+      setStatusError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update the account status."
+      );
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   return (
     <>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">SYSTEM ACCOUNTS</p>
+          <p className="eyebrow">
+            SYSTEM ACCOUNTS
+          </p>
+
           <h2>Users</h2>
+
           <p className="page-description">
-            Monitor customer and business accounts in Cargo Track PH.
+            Monitor customer and business
+            accounts in Cargo Track PH.
           </p>
         </div>
 
         <div className="users-header-badge">
           <UsersIcon size={17} />
-          <span>{users.length} Accounts</span>
+          <span>
+            {users.length} Accounts
+          </span>
         </div>
       </div>
 
@@ -280,21 +416,29 @@ export default function Users() {
         <UserStat
           title="Total Users"
           value={users.length}
-          icon={<UsersIcon size={22} />}
+          icon={
+            <UsersIcon size={22} />
+          }
           tone="blue"
         />
 
         <UserStat
           title="Customers"
           value={customerCount}
-          icon={<UserRound size={22} />}
+          icon={
+            <UserRound size={22} />
+          }
           tone="purple"
         />
 
         <UserStat
           title="Business Accounts"
           value={businessCount}
-          icon={<BriefcaseBusiness size={22} />}
+          icon={
+            <BriefcaseBusiness
+              size={22}
+            />
+          }
           tone="yellow"
         />
 
@@ -313,12 +457,22 @@ export default function Users() {
 
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search name, email, or business..."
+              onChange={(event) =>
+                setSearch(
+                  event.target.value
+                )
+              }
+              placeholder="Search name, email, phone, or business..."
             />
 
             {search && (
-              <button onClick={() => setSearch("")}>
+              <button
+                type="button"
+                onClick={() =>
+                  setSearch("")
+                }
+                aria-label="Clear search"
+              >
                 <X size={17} />
               </button>
             )}
@@ -327,13 +481,16 @@ export default function Users() {
           <div className="user-filters">
             {roleFilters.map((role) => (
               <button
+                type="button"
                 key={role}
                 className={
                   selectedRole === role
                     ? "user-filter active"
                     : "user-filter"
                 }
-                onClick={() => setSelectedRole(role)}
+                onClick={() =>
+                  setSelectedRole(role)
+                }
               >
                 {role}
               </button>
@@ -341,9 +498,36 @@ export default function Users() {
           </div>
         </div>
 
+        {pageError && (
+          <div
+            className="admin-login-error"
+            style={{
+              margin: "0 24px 18px",
+            }}
+          >
+            <AlertCircle size={17} />
+
+            <span>{pageError}</span>
+
+            <button
+              type="button"
+              className="view-user-button"
+              onClick={() =>
+                void loadUsers()
+              }
+            >
+              <RefreshCw size={15} />
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="user-result-bar">
           <div>
-            <strong>{filteredUsers.length}</strong>
+            <strong>
+              {filteredUsers.length}
+            </strong>
+
             <span>
               {filteredUsers.length === 1
                 ? " user found"
@@ -351,7 +535,9 @@ export default function Users() {
             </span>
           </div>
 
-          <span>Role: {selectedRole}</span>
+          <span>
+            Role: {selectedRole}
+          </span>
         </div>
 
         <div className="users-table-wrap">
@@ -368,81 +554,147 @@ export default function Users() {
             </thead>
 
             <tbody>
-              {filteredUsers.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <div className="user-table-cell">
-                      <div
-                        className={
-                          user.role === "Business"
-                            ? "user-table-avatar business"
-                            : "user-table-avatar"
-                        }
-                      >
-                        {user.role === "Business" ? (
-                          <BriefcaseBusiness size={20} />
-                        ) : (
-                          <UserRound size={20} />
-                        )}
-                      </div>
-
-                      <div>
-                        <strong>{user.name}</strong>
-                        <span>{user.email}</span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td>
-                    <span
-                      className={
-                        user.role === "Business"
-                          ? "user-role business"
-                          : "user-role"
-                      }
-                    >
-                      {user.role === "Business" ? (
-                        <BriefcaseBusiness size={13} />
-                      ) : (
-                        <UserRound size={13} />
-                      )}
-
-                      {user.role}
-                    </span>
-                  </td>
-
-                  <td>{user.phone}</td>
-                  <td>{user.joined}</td>
-
-                  <td>
-                    <UserStatusBadge status={user.status} />
-                  </td>
-
-                  <td className="user-action-cell">
-                    <button
-                      className="view-user-button"
-                      onClick={() => setSelectedUser(user)}
-                    >
-                      <Eye size={16} />
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredUsers.length === 0 && (
+              {loading && (
                 <tr>
                   <td colSpan={6}>
                     <div className="users-empty">
-                      <UsersIcon size={34} />
-                      <strong>No users found</strong>
+                      <RefreshCw
+                        size={30}
+                      />
+
+                      <strong>
+                        Loading users...
+                      </strong>
+
                       <span>
-                        Try changing the search or role filter.
+                        Retrieving accounts
+                        from Supabase.
                       </span>
                     </div>
                   </td>
                 </tr>
               )}
+
+              {!loading &&
+                filteredUsers.map(
+                  (user) => (
+                    <tr key={user.id}>
+                      <td>
+                        <div className="user-table-cell">
+                          <div
+                            className={
+                              user.role ===
+                              "Business"
+                                ? "user-table-avatar business"
+                                : "user-table-avatar"
+                            }
+                          >
+                            {user.role ===
+                            "Business" ? (
+                              <BriefcaseBusiness
+                                size={20}
+                              />
+                            ) : (
+                              <UserRound
+                                size={20}
+                              />
+                            )}
+                          </div>
+
+                          <div>
+                            <strong>
+                              {user.name}
+                            </strong>
+
+                            <span>
+                              {user.email}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td>
+                        <span
+                          className={
+                            user.role ===
+                            "Business"
+                              ? "user-role business"
+                              : "user-role"
+                          }
+                        >
+                          {user.role ===
+                          "Business" ? (
+                            <BriefcaseBusiness
+                              size={13}
+                            />
+                          ) : (
+                            <UserRound
+                              size={13}
+                            />
+                          )}
+
+                          {user.role}
+                        </span>
+                      </td>
+
+                      <td>
+                        {user.phone}
+                      </td>
+
+                      <td>
+                        {user.joined}
+                      </td>
+
+                      <td>
+                        <UserStatusBadge
+                          status={
+                            user.status
+                          }
+                        />
+                      </td>
+
+                      <td className="user-action-cell">
+                        <button
+                          type="button"
+                          className="view-user-button"
+                          onClick={() =>
+                            openUserDetails(
+                              user
+                            )
+                          }
+                        >
+                          <Eye size={16} />
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                )}
+
+              {!loading &&
+                !pageError &&
+                filteredUsers.length ===
+                  0 && (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="users-empty">
+                        <UsersIcon
+                          size={34}
+                        />
+
+                        <strong>
+                          No users found
+                        </strong>
+
+                        <span>
+                          {users.length === 0
+                            ? "No customer or business accounts have registered yet."
+                            : "Try changing the search or role filter."}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
             </tbody>
           </table>
         </div>
@@ -453,14 +705,29 @@ export default function Users() {
           <div className="user-modal">
             <div className="application-modal-header">
               <div>
-                <p className="eyebrow">SYSTEM ACCOUNT</p>
-                <h3>Account Details</h3>
-                <span>{selectedUser.id}</span>
+                <p className="eyebrow">
+                  SYSTEM ACCOUNT
+                </p>
+
+                <h3>
+                  Account Details
+                </h3>
+
+                <span>
+                  {selectedUser.displayId}
+                </span>
               </div>
 
               <button
+                type="button"
                 className="modal-close"
-                onClick={() => setSelectedUser(null)}
+                onClick={
+                  closeUserDetails
+                }
+                disabled={
+                  isUpdatingStatus
+                }
+                aria-label="Close account details"
               >
                 <X size={20} />
               </button>
@@ -470,88 +737,144 @@ export default function Users() {
               <div className="user-detail-hero">
                 <div
                   className={
-                    selectedUser.role === "Business"
+                    selectedUser.role ===
+                    "Business"
                       ? "user-detail-avatar business"
                       : "user-detail-avatar"
                   }
                 >
-                  {selectedUser.role === "Business" ? (
-                    <BriefcaseBusiness size={30} />
+                  {selectedUser.role ===
+                  "Business" ? (
+                    <BriefcaseBusiness
+                      size={30}
+                    />
                   ) : (
-                    <UserRound size={30} />
+                    <UserRound
+                      size={30}
+                    />
                   )}
                 </div>
 
                 <div>
-                  <h3>{selectedUser.name}</h3>
-                  <p>{selectedUser.role} Account</p>
+                  <h3>
+                    {selectedUser.name}
+                  </h3>
+
+                  <p>
+                    {selectedUser.role}{" "}
+                    Account
+                  </p>
                 </div>
 
-                <UserStatusBadge status={selectedUser.status} />
+                <UserStatusBadge
+                  status={
+                    selectedUser.status
+                  }
+                />
               </div>
 
               <div className="detail-grid">
                 <UserDetailCard
-                  icon={<Mail size={18} />}
+                  icon={
+                    <Mail size={18} />
+                  }
                   label="Email Address"
-                  value={selectedUser.email}
+                  value={
+                    selectedUser.email
+                  }
                 />
 
                 <UserDetailCard
-                  icon={<Phone size={18} />}
+                  icon={
+                    <Phone size={18} />
+                  }
                   label="Phone Number"
-                  value={selectedUser.phone}
+                  value={
+                    selectedUser.phone
+                  }
                 />
 
                 <UserDetailCard
-                  icon={<ShieldCheck size={18} />}
+                  icon={
+                    <ShieldCheck
+                      size={18}
+                    />
+                  }
                   label="Account Role"
-                  value={selectedUser.role}
+                  value={
+                    selectedUser.role
+                  }
                 />
 
                 <UserDetailCard
-                  icon={<CheckCircle2 size={18} />}
+                  icon={
+                    <CheckCircle2
+                      size={18}
+                    />
+                  }
                   label="Date Joined"
-                  value={selectedUser.joined}
+                  value={
+                    selectedUser.joined
+                  }
                 />
               </div>
 
               {selectedUser.businessName && (
                 <div className="linked-user-business">
                   <div className="linked-user-business-icon">
-                    <BriefcaseBusiness size={22} />
+                    <BriefcaseBusiness
+                      size={22}
+                    />
                   </div>
 
                   <div>
-                    <span>LINKED BUSINESS</span>
-                    <strong>{selectedUser.businessName}</strong>
+                    <span>
+                      LINKED BUSINESS
+                    </span>
+
+                    <strong>
+                      {
+                        selectedUser.businessName
+                      }
+                    </strong>
                   </div>
                 </div>
               )}
 
               <div className="user-status-section">
-                <h4>Account Status</h4>
+                <h4>
+                  Account Status
+                </h4>
 
                 <div className="user-status-info">
                   <div
                     className={
-                      selectedUser.status === "Active"
+                      selectedUser.status ===
+                      "Active"
                         ? "user-status-info-icon active"
                         : "user-status-info-icon disabled"
                     }
                   >
-                    {selectedUser.status === "Active" ? (
-                      <CheckCircle2 size={22} />
+                    {selectedUser.status ===
+                    "Active" ? (
+                      <CheckCircle2
+                        size={22}
+                      />
                     ) : (
                       <Ban size={22} />
                     )}
                   </div>
 
                   <div>
-                    <strong>{selectedUser.status}</strong>
+                    <strong>
+                      {
+                        selectedUser.status
+                      }
+                    </strong>
 
                     <span>
-                      {selectedUser.status === "Active"
+                      {selectedUser.status ===
+                      "Active"
                         ? "This account currently has access to the system."
                         : "This account is currently disabled."}
                     </span>
@@ -559,29 +882,68 @@ export default function Users() {
                 </div>
               </div>
 
+              {statusError && (
+                <div className="admin-login-error">
+                  <AlertCircle
+                    size={17}
+                  />
+
+                  <span>
+                    {statusError}
+                  </span>
+                </div>
+              )}
+
               <div className="user-permission-note">
-                Admin can currently view account information and manage
-                account status. Editing personal data, passwords, and
-                deleting accounts are not enabled yet.
+                Admin can view account
+                information and manage account
+                status. Editing personal data,
+                passwords, and deleting accounts
+                are not enabled.
               </div>
             </div>
 
             <div className="application-modal-footer">
-              {selectedUser.status === "Active" ? (
+              {selectedUser.status ===
+              "Active" ? (
                 <button
+                  type="button"
                   className="disable-user-button"
-                  onClick={() => updateUserStatus("Disabled")}
+                  disabled={
+                    isUpdatingStatus
+                  }
+                  onClick={() =>
+                    void updateUserStatus(
+                      "Disabled"
+                    )
+                  }
                 >
                   <Ban size={18} />
-                  Disable Account
+
+                  {isUpdatingStatus
+                    ? "Disabling..."
+                    : "Disable Account"}
                 </button>
               ) : (
                 <button
+                  type="button"
                   className="activate-user-button"
-                  onClick={() => updateUserStatus("Active")}
+                  disabled={
+                    isUpdatingStatus
+                  }
+                  onClick={() =>
+                    void updateUserStatus(
+                      "Active"
+                    )
+                  }
                 >
-                  <CheckCircle2 size={18} />
-                  Activate Account
+                  <CheckCircle2
+                    size={18}
+                  />
+
+                  {isUpdatingStatus
+                    ? "Activating..."
+                    : "Activate Account"}
                 </button>
               )}
             </div>
@@ -600,12 +962,16 @@ function UserStat({
 }: {
   title: string;
   value: number;
-  icon: React.ReactNode;
+  icon: ReactNode;
   tone: string;
 }) {
   return (
     <div className="user-stat-card">
-      <div className={`application-stat-icon ${tone}`}>
+      <div
+        className={
+          `application-stat-icon ${tone}`
+        }
+      >
         {icon}
       </div>
 
@@ -623,7 +989,11 @@ function UserStatusBadge({
   status: UserStatus;
 }) {
   return (
-    <span className={`user-status ${status.toLowerCase()}`}>
+    <span
+      className={
+        `user-status ${status.toLowerCase()}`
+      }
+    >
       <span />
       {status}
     </span>
@@ -635,13 +1005,15 @@ function UserDetailCard({
   label,
   value,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
 }) {
   return (
     <div className="detail-card">
-      <div className="detail-card-icon">{icon}</div>
+      <div className="detail-card-icon">
+        {icon}
+      </div>
 
       <div>
         <span>{label}</span>
