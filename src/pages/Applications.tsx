@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -20,12 +21,14 @@ import {
   Mail,
   MapPin,
   Phone,
+  RefreshCw,
   Search,
-  ShieldCheck,
   UserRound,
   X,
   XCircle,
 } from "lucide-react";
+
+import { supabase } from "../lib/supabase";
 
 type ApplicationStatus =
   | "Pending"
@@ -37,10 +40,13 @@ type BusinessDocument = {
   label: string;
   required: boolean;
   uploaded: boolean;
+  filePath: string;
+  originalName: string;
 };
 
 type BusinessApplication = {
   id: string;
+  applicationCode: string;
   businessName: string;
   representativeName: string;
   email: string;
@@ -58,8 +64,8 @@ type BusinessApplication = {
 
   documents: BusinessDocument[];
 
-  logoLabel: string;
-  coverLabel: string;
+  logoUrl: string;
+  coverUrl: string;
 };
 
 const COLORS = {
@@ -77,188 +83,69 @@ const COLORS = {
   warning: "#D97706",
 };
 
-const STORAGE_KEY =
-  "cargo-track-admin-business-applications-v1";
+type BusinessApplicationRow = {
+  id: string;
+  application_code: string;
+  business_name: string;
+  representative_name: string;
+  email: string;
+  phone: string;
+  description: string;
+  branch_address: string;
+  branch_latitude: number | null;
+  branch_longitude: number | null;
+  logo_path: string | null;
+  cover_path: string | null;
+  status: string;
+  submitted_at: string;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+};
 
-const INITIAL_APPLICATIONS:
-  BusinessApplication[] = [
-    {
-      id: "APP-2026-0001",
-      businessName:
-        "Palawan Sky Cargo",
-      representativeName:
-        "Maria Santos",
-      email:
-        "palawanskycargo@example.com",
-      phone: "09171234567",
-      description:
-        "A Puerto Princesa cargo company serving customers who need air cargo assistance for documents, general cargo, and selected special handling services.",
-      branchAddress:
-        "San Jose, Puerto Princesa City, Palawan",
-      branchLatitude:
-        9.77485,
-      branchLongitude:
-        118.75143,
-      status: "Pending",
-      submittedAt:
-        "2026-08-28T14:45:00.000Z",
-      documents: [
-        {
-          id: "registration",
-          label:
-            "Business Registration / Permit",
-          required: true,
-          uploaded: true,
-        },
-        {
-          id: "representative-id",
-          label:
-            "Representative Valid ID",
-          required: true,
-          uploaded: true,
-        },
-        {
-          id: "supporting",
-          label:
-            "Additional Supporting Document",
-          required: false,
-          uploaded: true,
-        },
-      ],
-      logoLabel:
-        "Company logo uploaded",
-      coverLabel:
-        "Cover photo uploaded",
-    },
-    {
-      id: "APP-2026-0002",
-      businessName:
-        "Puerto Freight Link",
-      representativeName:
-        "Carlo Reyes",
-      email:
-        "puertofreight@example.com",
-      phone: "09201234567",
-      description:
-        "Local freight and cargo service provider operating from Puerto Princesa City.",
-      branchAddress:
-        "San Manuel, Puerto Princesa City, Palawan",
-      branchLatitude:
-        9.7793,
-      branchLongitude:
-        118.7429,
-      status: "Approved",
-      submittedAt:
-        "2026-08-27T09:30:00.000Z",
-      reviewedAt:
-        "2026-08-27T11:10:00.000Z",
-      documents: [
-        {
-          id: "registration",
-          label:
-            "Business Registration / Permit",
-          required: true,
-          uploaded: true,
-        },
-        {
-          id: "representative-id",
-          label:
-            "Representative Valid ID",
-          required: true,
-          uploaded: true,
-        },
-        {
-          id: "supporting",
-          label:
-            "Additional Supporting Document",
-          required: false,
-          uploaded: false,
-        },
-      ],
-      logoLabel:
-        "Company logo uploaded",
-      coverLabel:
-        "Cover photo uploaded",
-    },
-    {
-      id: "APP-2026-0003",
-      businessName:
-        "Harbor Cargo Palawan",
-      representativeName:
-        "Ana Mendoza",
-      email:
-        "harborcargo@example.com",
-      phone: "09301234567",
-      description:
-        "Cargo and forwarding service based in Puerto Princesa City.",
-      branchAddress:
-        "Bancao-Bancao, Puerto Princesa City, Palawan",
-      branchLatitude:
-        9.7347,
-      branchLongitude:
-        118.7488,
-      status: "Rejected",
-      submittedAt:
-        "2026-08-26T08:15:00.000Z",
-      reviewedAt:
-        "2026-08-26T10:40:00.000Z",
-      rejectionReason:
-        "Business registration / permit image is unclear. Please upload a readable copy.",
-      documents: [
-        {
-          id: "registration",
-          label:
-            "Business Registration / Permit",
-          required: true,
-          uploaded: true,
-        },
-        {
-          id: "representative-id",
-          label:
-            "Representative Valid ID",
-          required: true,
-          uploaded: true,
-        },
-        {
-          id: "supporting",
-          label:
-            "Additional Supporting Document",
-          required: false,
-          uploaded: false,
-        },
-      ],
-      logoLabel:
-        "Company logo uploaded",
-      coverLabel:
-        "Cover photo uploaded",
-    },
-  ];
+type BusinessDocumentRow = {
+  application_id: string;
+  document_type: string;
+  file_path: string;
+  is_required: boolean | null;
+  original_name: string;
+};
 
-function loadApplications() {
-  try {
-    const raw =
-      window.localStorage.getItem(
-        STORAGE_KEY
-      );
+const DOCUMENT_LABELS:
+  Record<string, string> = {
+    business_permit:
+      "Business Registration / Permit",
+    representative_id:
+      "Representative Valid ID",
+    supporting_document:
+      "Additional Supporting Document",
+  };
 
-    if (!raw) {
-      return INITIAL_APPLICATIONS;
-    }
-
-    const parsed =
-      JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) {
-      return INITIAL_APPLICATIONS;
-    }
-
-    return parsed as
-      BusinessApplication[];
-  } catch {
-    return INITIAL_APPLICATIONS;
+function normalizeStatus(
+  value: string
+): ApplicationStatus {
+  if (value === "approved") {
+    return "Approved";
   }
+
+  if (value === "rejected") {
+    return "Rejected";
+  }
+
+  return "Pending";
 }
 
+function getPublicAssetUrl(
+  storagePath: string | null
+) {
+  if (!storagePath) {
+    return "";
+  }
+
+  return supabase.storage
+    .from("business-assets")
+    .getPublicUrl(storagePath)
+    .data.publicUrl;
+}
 function formatDateTime(
   value?: string
 ) {
@@ -310,7 +197,22 @@ export default function Applications() {
     setApplications,
   ] = useState<
     BusinessApplication[]
-  >(() => loadApplications());
+  >([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    pageError,
+    setPageError,
+  ] = useState("");
+
+  const [
+    reviewing,
+    setReviewing,
+  ] = useState(false);
 
   const [
     search,
@@ -342,14 +244,190 @@ export default function Applications() {
     setRejectionReason,
   ] = useState("");
 
+  const loadApplications =
+    useCallback(async () => {
+      setLoading(true);
+      setPageError("");
+
+      try {
+        const {
+          data: applicationRows,
+          error: applicationError,
+        } = await supabase
+          .from(
+            "business_applications"
+          )
+          .select(`
+            id,
+            application_code,
+            business_name,
+            representative_name,
+            email,
+            phone,
+            description,
+            branch_address,
+            branch_latitude,
+            branch_longitude,
+            logo_path,
+            cover_path,
+            status,
+            submitted_at,
+            reviewed_at,
+            rejection_reason
+          `)
+          .order("submitted_at", {
+            ascending: false,
+          });
+
+        if (applicationError) {
+          throw applicationError;
+        }
+
+        const typedApplications =
+          (applicationRows || []) as
+            BusinessApplicationRow[];
+
+        let documentRows:
+          BusinessDocumentRow[] = [];
+
+        const applicationIds =
+          typedApplications.map(
+            (application) =>
+              application.id
+          );
+
+        if (
+          applicationIds.length > 0
+        ) {
+          const {
+            data: loadedDocuments,
+            error: documentError,
+          } = await supabase
+            .from(
+              "business_application_documents"
+            )
+            .select(`
+              application_id,
+              document_type,
+              file_path,
+              is_required,
+              original_name
+            `)
+            .in(
+              "application_id",
+              applicationIds
+            );
+
+          if (documentError) {
+            throw documentError;
+          }
+
+          documentRows =
+            (loadedDocuments || []) as
+              BusinessDocumentRow[];
+        }
+
+        const mappedApplications =
+          typedApplications.map(
+            (application) => ({
+              id: application.id,
+              applicationCode:
+                application.application_code,
+              businessName:
+                application.business_name,
+              representativeName:
+                application.representative_name,
+              email:
+                application.email,
+              phone:
+                application.phone,
+              description:
+                application.description,
+              branchAddress:
+                application.branch_address,
+              branchLatitude:
+                Number(
+                  application.branch_latitude ||
+                    0
+                ),
+              branchLongitude:
+                Number(
+                  application.branch_longitude ||
+                    0
+                ),
+              status:
+                normalizeStatus(
+                  application.status
+                ),
+              submittedAt:
+                application.submitted_at,
+              reviewedAt:
+                application.reviewed_at ||
+                undefined,
+              rejectionReason:
+                application.rejection_reason ||
+                undefined,
+              documents:
+                documentRows
+                  .filter(
+                    (document) =>
+                      document.application_id ===
+                      application.id
+                  )
+                  .map(
+                    (document) => ({
+                      id:
+                        document.document_type,
+                      label:
+                        DOCUMENT_LABELS[
+                          document
+                            .document_type
+                        ] ||
+                        document.original_name,
+                      required:
+                        document.is_required ??
+                        document.document_type !==
+                          "supporting_document",
+                      uploaded: true,
+                      filePath:
+                        document.file_path,
+                      originalName:
+                        document.original_name,
+                    })
+                  ),
+              logoUrl:
+                getPublicAssetUrl(
+                  application.logo_path
+                ),
+              coverUrl:
+                getPublicAssetUrl(
+                  application.cover_path
+                ),
+            })
+          );
+
+        setApplications(
+          mappedApplications
+        );
+      } catch (error) {
+        console.error(
+          "Unable to load business applications:",
+          error
+        );
+
+        setPageError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load business applications."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+
   useEffect(() => {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(
-        applications
-      )
-    );
-  }, [applications]);
+    void loadApplications();
+  }, [loadApplications]);
 
   const selectedApplication =
     useMemo(
@@ -383,6 +461,7 @@ export default function Applications() {
             !query ||
             [
               application.id,
+              application.applicationCode,
               application.businessName,
               application.representativeName,
               application.email,
@@ -432,100 +511,180 @@ export default function Applications() {
       [applications]
     );
 
-  const updateStatus = (
-    id: string,
-    status: ApplicationStatus,
-    reason?: string
-  ) => {
-    const now =
-      new Date().toISOString();
-
-    setApplications(
-      (current) =>
-        current.map(
-          (application) =>
-            application.id === id
-              ? {
-                  ...application,
-                  status,
-                  reviewedAt: now,
-                  rejectionReason:
-                    status ===
-                    "Rejected"
-                      ? reason?.trim()
-                      : undefined,
-                }
-              : application
-        )
-    );
-  };
-
-  const approveSelected =
-    () => {
+  const reviewSelected =
+    async (
+      decision:
+        | "approve"
+        | "reject",
+      reason?: string
+    ) => {
       if (
         !selectedApplication ||
-        selectedApplication.status ===
-          "Approved"
+        selectedApplication.status !==
+          "Pending" ||
+        reviewing
+      ) {
+        return false;
+      }
+
+      setReviewing(true);
+
+      try {
+        const { error } =
+          await supabase.rpc(
+            "review_business_application",
+            {
+              requested_application_id:
+                selectedApplication.id,
+              requested_decision:
+                decision,
+              requested_rejection_reason:
+                reason?.trim() ||
+                null,
+            }
+          );
+
+        if (error) {
+          throw error;
+        }
+
+        await loadApplications();
+
+        return true;
+      } catch (error) {
+        console.error(
+          "Unable to review business application:",
+          error
+        );
+
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "Unable to review the application."
+        );
+
+        return false;
+      } finally {
+        setReviewing(false);
+      }
+    };
+
+  const approveSelected =
+    async () => {
+      if (
+        !selectedApplication ||
+        selectedApplication.status !==
+          "Pending"
       ) {
         return;
       }
 
       const confirmed =
         window.confirm(
-          `Approve ${selectedApplication.businessName}?\n\nThe business will be marked Approved in this admin prototype.`
+          `Approve ${selectedApplication.businessName}?\n\nAn active business record will be created and the application will become visible to the owner.`
         );
 
       if (!confirmed) {
         return;
       }
 
-      updateStatus(
-        selectedApplication.id,
-        "Approved"
-      );
+      const success =
+        await reviewSelected(
+          "approve"
+        );
+
+      if (success) {
+        window.alert(
+          "Business application approved successfully."
+        );
+      }
     };
 
   const openReject = () => {
     if (
-      !selectedApplication
+      !selectedApplication ||
+      selectedApplication.status !==
+        "Pending"
     ) {
       return;
     }
 
-    setRejectionReason(
-      selectedApplication.rejectionReason ||
-        ""
-    );
+    setRejectionReason("");
     setRejectVisible(true);
   };
 
-  const confirmReject = () => {
-    if (
-      !selectedApplication
-    ) {
-      return;
-    }
+  const confirmReject =
+    async () => {
+      if (
+        !selectedApplication ||
+        reviewing
+      ) {
+        return;
+      }
 
-    if (
-      rejectionReason.trim()
-        .length < 8
-    ) {
+      if (
+        rejectionReason.trim()
+          .length < 8
+      ) {
+        window.alert(
+          "Please enter a clear rejection reason."
+        );
+        return;
+      }
+
+      const success =
+        await reviewSelected(
+          "reject",
+          rejectionReason
+        );
+
+      if (!success) {
+        return;
+      }
+
+      setRejectVisible(false);
+      setRejectionReason("");
+
       window.alert(
-        "Please enter a clear rejection reason."
+        "Business application rejected. The reason is now visible to the business owner."
       );
-      return;
-    }
+    };
 
-    updateStatus(
-      selectedApplication.id,
-      "Rejected",
-      rejectionReason
-    );
+  const viewDocument =
+    async (
+      document:
+        BusinessDocument
+    ) => {
+      if (!document.filePath) {
+        window.alert(
+          "No uploaded file was found for this document."
+        );
+        return;
+      }
 
-    setRejectVisible(false);
-    setRejectionReason("");
-  };
+      const {
+        data,
+        error,
+      } = await supabase.storage
+        .from("business-documents")
+        .createSignedUrl(
+          document.filePath,
+          300
+        );
 
+      if (error) {
+        window.alert(
+          `Unable to open document: ${error.message}`
+        );
+        return;
+      }
+
+      window.open(
+        data.signedUrl,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    };
   return (
     <div style={styles.page}>
       {/* PAGE HEADER */}
@@ -563,19 +722,25 @@ export default function Applications() {
           </p>
         </div>
 
-        <div
+        <button
           style={
             styles.headerBadge
           }
+          onClick={() =>
+            void loadApplications()
+          }
+          disabled={loading}
         >
-          <ShieldCheck
+          <RefreshCw
             size={19}
           />
 
           <span>
-            Admin Review
+            {loading
+              ? "Loading..."
+              : "Refresh Data"}
           </span>
-        </div>
+        </button>
       </div>
 
       {/* STATS */}
@@ -736,7 +901,7 @@ export default function Applications() {
                 styles.liveDot
               }
             />
-            Prototype Review
+            Live Supabase Data
           </div>
         </div>
 
@@ -833,8 +998,11 @@ export default function Applications() {
                 styles.emptyTitle
               }
             >
-              No applications
-              found
+              {loading
+                ? "Loading applications..."
+                : pageError
+                ? "Unable to load applications"
+                : "No applications found"}
             </div>
 
             <div
@@ -842,8 +1010,10 @@ export default function Applications() {
                 styles.emptyText
               }
             >
-              Try another search
-              or status filter.
+              {pageError ||
+                (loading
+                  ? "Please wait while the registration queue is loaded."
+                  : "Try another search or status filter.")}
             </div>
           </div>
         )}
@@ -868,7 +1038,9 @@ export default function Applications() {
               styles.prototypeNoticeTitle
             }
           >
-            Prototype behavior
+            {pageError
+              ? "Supabase connection error"
+              : "Connected to Supabase"}
           </div>
 
           <div
@@ -876,15 +1048,8 @@ export default function Applications() {
               styles.prototypeNoticeText
             }
           >
-            Approve / Reject
-            actions persist in this
-            admin browser using
-            localStorage. The
-            separate Expo mobile app
-            cannot receive these
-            changes yet until both
-            projects share a backend
-            such as Supabase.
+            {pageError ||
+              "Applications and review decisions are stored in the shared backend. Approved applications automatically create an active business record, while rejection reasons become visible to the business owner."}
           </div>
         </div>
       </div>
@@ -923,7 +1088,7 @@ export default function Applications() {
                   }
                 >
                   {
-                    selectedApplication.id
+                    selectedApplication.applicationCode
                   }
                 </div>
 
@@ -1086,7 +1251,7 @@ export default function Applications() {
 
               <SectionTitle
                 title="Submitted Documents"
-                subtitle="Prototype document checklist"
+                subtitle="Private files accessible only to the applicant and authorized administrators"
               />
 
               <div
@@ -1143,6 +1308,9 @@ export default function Applications() {
                           {document.uploaded
                             ? "Uploaded"
                             : "Not uploaded"}
+                          {document.originalName
+                            ? ` • ${document.originalName}`
+                            : ""}
                         </div>
                       </div>
 
@@ -1165,6 +1333,24 @@ export default function Applications() {
                           "Missing"
                         )}
                       </div>
+
+                      {document.uploaded && (
+                        <button
+                          style={
+                            styles.documentViewButton
+                          }
+                          onClick={() =>
+                            void viewDocument(
+                              document
+                            )
+                          }
+                        >
+                          <Eye
+                            size={14}
+                          />
+                          View File
+                        </button>
+                      )}
                     </div>
                   )
                 )}
@@ -1182,16 +1368,18 @@ export default function Applications() {
               >
                 <MediaPlaceholder
                   label="Company Logo"
-                  value={
-                    selectedApplication.logoLabel
+                  value="Submitted company logo"
+                  imageUrl={
+                    selectedApplication.logoUrl
                   }
                   square
                 />
 
                 <MediaPlaceholder
                   label="Cover Photo"
-                  value={
-                    selectedApplication.coverLabel
+                  value="Submitted company cover"
+                  imageUrl={
+                    selectedApplication.coverUrl
                   }
                 />
               </div>
@@ -1236,36 +1424,63 @@ export default function Applications() {
                 styles.modalFooter
               }
             >
-              <button
-                style={
-                  styles.secondaryButton
-                }
-                onClick={
-                  openReject
-                }
-              >
-                <XCircle
-                  size={18}
-                />
-                Reject
-              </button>
+              {selectedApplication.status ===
+              "Pending" ? (
+                <>
+                  <button
+                    style={{
+                      ...styles.secondaryButton,
+                      opacity:
+                        reviewing
+                          ? 0.6
+                          : 1,
+                    }}
+                    onClick={
+                      openReject
+                    }
+                    disabled={reviewing}
+                  >
+                    <XCircle
+                      size={18}
+                    />
+                    Reject
+                  </button>
 
-              <button
-                style={
-                  styles.approveButton
-                }
-                onClick={
-                  approveSelected
-                }
-              >
-                <BadgeCheck
-                  size={18}
-                />
-                {selectedApplication.status ===
-                "Approved"
-                  ? "Approved"
-                  : "Approve Business"}
-              </button>
+                  <button
+                    style={{
+                      ...styles.approveButton,
+                      opacity:
+                        reviewing
+                          ? 0.6
+                          : 1,
+                    }}
+                    onClick={
+                      approveSelected
+                    }
+                    disabled={reviewing}
+                  >
+                    <BadgeCheck
+                      size={18}
+                    />
+                    {reviewing
+                      ? "Saving..."
+                      : "Approve Business"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  style={
+                    styles.cancelButton
+                  }
+                  onClick={() =>
+                    setSelectedId(
+                      null
+                    )
+                  }
+                >
+                  Close
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1358,14 +1573,21 @@ export default function Applications() {
                 </button>
 
                 <button
-                  style={
-                    styles.confirmRejectButton
-                  }
+                  style={{
+                    ...styles.confirmRejectButton,
+                    opacity:
+                      reviewing
+                        ? 0.6
+                        : 1,
+                  }}
                   onClick={
                     confirmReject
                   }
+                  disabled={reviewing}
                 >
-                  Reject Application
+                  {reviewing
+                    ? "Saving..."
+                    : "Reject Application"}
                 </button>
               </div>
             </div>
@@ -1429,7 +1651,7 @@ function ApplicationRow({
                 styles.applicationId
               }
             >
-              {application.id}
+              {application.applicationCode}
             </div>
           </div>
         </div>
@@ -1675,10 +1897,12 @@ function InfoCard({
 function MediaPlaceholder({
   label,
   value,
+  imageUrl,
   square = false,
 }: {
   label: string;
   value: string;
+  imageUrl: string;
   square?: boolean;
 }) {
   return (
@@ -1690,15 +1914,28 @@ function MediaPlaceholder({
           : {}),
       }}
     >
-      <div
-        style={
-          styles.mediaIcon
-        }
-      >
-        <Building2
-          size={25}
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={label}
+          style={{
+            ...styles.mediaPreview,
+            ...(square
+              ? styles.mediaPreviewSquare
+              : {}),
+          }}
         />
-      </div>
+      ) : (
+        <div
+          style={
+            styles.mediaIcon
+          }
+        >
+          <Building2
+            size={25}
+          />
+        </div>
+      )}
 
       <div
         style={
@@ -1860,6 +2097,8 @@ const styles: Record<
     fontSize: 12,
     fontWeight: 800,
     whiteSpace: "nowrap",
+    border: "none",
+    cursor: "pointer",
   },
 
   statsGrid: {
@@ -2523,6 +2762,25 @@ const styles: Record<
       "#F1F5F9",
   },
 
+  documentViewButton: {
+    minHeight: 30,
+    borderRadius: 9,
+    border:
+      `1px solid ${COLORS.blue}`,
+    background:
+      COLORS.white,
+    color: COLORS.blue,
+    padding: "0 9px",
+    display:
+      "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 8,
+    fontWeight: 900,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+
   mediaGrid: {
     display: "grid",
     gridTemplateColumns:
@@ -2560,6 +2818,20 @@ const styles: Record<
     color: COLORS.blue,
     display: "grid",
     placeItems: "center",
+  },
+
+  mediaPreview: {
+    width: "100%",
+    height: 92,
+    borderRadius: 11,
+    objectFit: "cover",
+    border:
+      `1px solid ${COLORS.border}`,
+  },
+
+  mediaPreviewSquare: {
+    width: 88,
+    height: 88,
   },
 
   mediaLabel: {
