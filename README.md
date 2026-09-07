@@ -40,6 +40,23 @@ once in the same Supabase project before opening the page. The mobile
 Existing requests retain their submitted package name, duration, and price
 snapshots when package settings are edited.
 
+## Business management
+
+The Businesses page reads approved company accounts directly from Supabase. It
+includes:
+
+- real business branding and contact information;
+- live destination, cargo type, rate, booking, and gallery counts;
+- search, Active/Suspended filters, refresh, loading, and error states;
+- administrator-only suspend/reactivate actions;
+- a permanent audit history with the reason and timestamp for every status
+  change.
+
+Run [supabase/admin-business-management.sql](supabase/admin-business-management.sql)
+once before opening the page. See
+[ADMIN_BUSINESS_MANAGEMENT_SETUP.md](ADMIN_BUSINESS_MANAGEMENT_SETUP.md) for the
+test checklist and security behavior.
+
 ## Validation
 
 ```bash

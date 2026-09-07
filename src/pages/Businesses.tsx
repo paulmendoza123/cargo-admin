@@ -1,260 +1,248 @@
-import { useEffect, useMemo, useState } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type { ReactNode } from "react";
+import {
+  AlertCircle,
   BriefcaseBusiness,
   CheckCircle2,
+  Clock3,
   Eye,
+  ImageIcon,
+  Loader2,
   Mail,
   MapPin,
   PauseCircle,
   Phone,
+  RefreshCw,
   Search,
   X,
 } from "lucide-react";
 
-type BusinessStatus = "Active" | "Suspended";
+import {
+  loadAdminBusinesses,
+  loadAdminBusinessStatusHistory,
+  setAdminBusinessStatus,
+} from "../lib/businesses";
+import type {
+  AdminBusiness,
+  BusinessStatus,
+  BusinessStatusHistoryEntry,
+} from "../lib/businesses";
+import "./Businesses.css";
 
-type Business = {
-  id: string;
-  sourceApplicationId?: string;
-  name: string;
-  representative: string;
-  email: string;
-  phone: string;
-  address: string;
-  description: string;
-  status: BusinessStatus;
-  approvedDate: string;
-  destinations: string[];
-  cargoTypes: string[];
-  shipments: number;
-  rates: number;
-};
+const filters = ["All", "Active", "Suspended"] as const;
+type Filter = (typeof filters)[number];
 
-type ApprovedApplication = {
-  id: string;
-  businessName: string;
-  representativeName: string;
-  email: string;
-  phone: string;
-  description: string;
-  branchAddress: string;
-  status: "Pending" | "Approved" | "Rejected";
-  submittedAt: string;
-  reviewedAt?: string;
-};
-
-const APPLICATIONS_STORAGE_KEY =
-  "cargo-track-admin-business-applications-v1";
-
-const BUSINESSES_STORAGE_KEY =
-  "cargo-track-admin-businesses-v1";
-
-const initialBusinesses: Business[] = [
-  {
-    id: "BUS-001",
-    name: "ABC Cargo Express",
-    representative: "Michael Santos",
-    email: "abccargo@example.com",
-    phone: "0917 123 4567",
-    address: "Puerto Princesa City, Palawan",
-    description:
-      "Cargo transport services serving Manila, Cebu, and Davao.",
-    status: "Active",
-    approvedDate: "Aug 10, 2026",
-    destinations: ["Manila", "Cebu", "Davao"],
-    cargoTypes: [
-      "General Cargo",
-      "Documents",
-      "Live Animals",
-      "Live Fish & Marine Products",
-    ],
-    shipments: 32,
-    rates: 12,
-  },
-  {
-    id: "BUS-002",
-    name: "XYZ Cargo Services",
-    representative: "Leonardo Cruz",
-    email: "xyzcargo@example.com",
-    phone: "0918 222 3344",
-    address: "Puerto Princesa City, Palawan",
-    description:
-      "Freight and document cargo services between Palawan and major destinations.",
-    status: "Active",
-    approvedDate: "Aug 8, 2026",
-    destinations: ["Manila", "Cebu"],
-    cargoTypes: ["General Cargo", "Documents"],
-    shipments: 21,
-    rates: 4,
-  },
-  {
-    id: "BUS-003",
-    name: "Palawan Cargo Lines",
-    representative: "Andrea Reyes",
-    email: "palawancargo@example.com",
-    phone: "0919 333 4455",
-    address: "Puerto Princesa City, Palawan",
-    description:
-      "Cargo transport specializing in general freight and marine products.",
-    status: "Active",
-    approvedDate: "Aug 5, 2026",
-    destinations: ["Manila", "Davao"],
-    cargoTypes: [
-      "General Cargo",
-      "Live Fish & Marine Products",
-    ],
-    shipments: 18,
-    rates: 4,
-  },
-  {
-    id: "BUS-004",
-    name: "Island Freight Palawan",
-    representative: "Paolo Mendoza",
-    email: "islandfreight@example.com",
-    phone: "0920 555 6677",
-    address: "Puerto Princesa City, Palawan",
-    description:
-      "Inter-island freight services for general cargo and live animals.",
-    status: "Suspended",
-    approvedDate: "Jul 29, 2026",
-    destinations: ["Cebu", "Davao"],
-    cargoTypes: ["General Cargo", "Live Animals"],
-    shipments: 10,
-    rates: 4,
-  },
-];
-
-function formatApprovedDate(value?: string) {
+function formatDate(value?: string) {
   if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "—";
 
   return new Intl.DateTimeFormat("en-PH", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(value));
+  }).format(date);
 }
 
-function readApprovedApplications(): ApprovedApplication[] {
-  try {
-    const raw = window.localStorage.getItem(
-      APPLICATIONS_STORAGE_KEY
-    );
+function formatDateTime(value?: string) {
+  if (!value) return "—";
 
-    if (!raw) return [];
+  const date = new Date(value);
 
-    const parsed = JSON.parse(raw);
+  if (Number.isNaN(date.getTime())) return "—";
 
-    if (!Array.isArray(parsed)) return [];
-
-    return (parsed as ApprovedApplication[]).filter(
-      (application) => application.status === "Approved"
-    );
-  } catch {
-    return [];
-  }
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
-
-function applicationToBusiness(
-  application: ApprovedApplication
-): Business {
-  return {
-    id: `BUS-${application.id.replace(/^APP-/, "")}`,
-    sourceApplicationId: application.id,
-    name: application.businessName,
-    representative: application.representativeName,
-    email: application.email,
-    phone: application.phone,
-    address: application.branchAddress,
-    description: application.description,
-    status: "Active",
-    approvedDate: formatApprovedDate(
-      application.reviewedAt || application.submittedAt
-    ),
-    destinations: [],
-    cargoTypes: [],
-    shipments: 0,
-    rates: 0,
-  };
-}
-
-function loadBusinesses(): Business[] {
-  let storedBusinesses = initialBusinesses;
-
-  try {
-    const raw = window.localStorage.getItem(
-      BUSINESSES_STORAGE_KEY
-    );
-
-    if (raw) {
-      const parsed = JSON.parse(raw);
-
-      if (Array.isArray(parsed)) {
-        storedBusinesses = parsed as Business[];
-      }
-    }
-  } catch {
-    storedBusinesses = initialBusinesses;
-  }
-
-  const approvedApplications = readApprovedApplications();
-  const approvedIds = new Set(
-    approvedApplications.map((application) => application.id)
-  );
-
-  const syncedBusinesses = storedBusinesses.filter(
-    (business) =>
-      !business.sourceApplicationId ||
-      approvedIds.has(business.sourceApplicationId)
-  );
-
-  approvedApplications.forEach((application) => {
-    const existingIndex = syncedBusinesses.findIndex(
-      (business) =>
-        business.sourceApplicationId === application.id
-    );
-
-    const applicationBusiness = applicationToBusiness(application);
-
-    if (existingIndex === -1) {
-      syncedBusinesses.push(applicationBusiness);
-      return;
-    }
-
-    const existingBusiness = syncedBusinesses[existingIndex];
-
-    syncedBusinesses[existingIndex] = {
-      ...applicationBusiness,
-      status: existingBusiness.status,
-      destinations: existingBusiness.destinations,
-      cargoTypes: existingBusiness.cargoTypes,
-      shipments: existingBusiness.shipments,
-      rates: existingBusiness.rates,
-    };
-  });
-
-  return syncedBusinesses;
-}
-
-const filters = ["All", "Active", "Suspended"] as const;
-type Filter = (typeof filters)[number];
 
 export default function Businesses() {
   const [businesses, setBusinesses] =
-    useState<Business[]>(() => loadBusinesses());
+    useState<AdminBusiness[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pageError, setPageError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const [search, setSearch] = useState("");
   const [selectedFilter, setSelectedFilter] =
     useState<Filter>("All");
-
   const [selectedBusiness, setSelectedBusiness] =
-    useState<Business | null>(null);
+    useState<AdminBusiness | null>(null);
+
+  const [history, setHistory] =
+    useState<BusinessStatusHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  const [statusAction, setStatusAction] =
+    useState<BusinessStatus | null>(null);
+  const [statusReason, setStatusReason] = useState("");
+  const [working, setWorking] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  const loadPage = useCallback(async (quiet = false) => {
+    if (quiet) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setPageError("");
+
+    try {
+      const nextBusinesses = await loadAdminBusinesses();
+      setBusinesses(nextBusinesses);
+      setSelectedBusiness((current) =>
+        current
+          ? nextBusinesses.find(
+              (business) => business.id === current.id
+            ) || null
+          : null
+      );
+    } catch (error) {
+      console.error("Unable to load businesses:", error);
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load businesses."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  const loadHistory = useCallback(async (businessId: string) => {
+    setHistoryLoading(true);
+    setHistoryError("");
+
+    try {
+      setHistory(
+        await loadAdminBusinessStatusHistory(businessId)
+      );
+    } catch (error) {
+      console.error(
+        "Unable to load business status history:",
+        error
+      );
+      setHistoryError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load status history."
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      BUSINESSES_STORAGE_KEY,
-      JSON.stringify(businesses)
-    );
-  }, [businesses]);
+    const initialLoad = window.setTimeout(() => {
+      void loadPage();
+    }, 0);
+
+    return () => window.clearTimeout(initialLoad);
+  }, [loadPage]);
+
+  useEffect(() => {
+    const refreshOnFocus = () => {
+      void loadPage(true);
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [loadPage]);
+
+  const openBusiness = (business: AdminBusiness) => {
+    setSelectedBusiness(business);
+    setHistory([]);
+    setStatusAction(null);
+    setStatusReason("");
+    setActionError("");
+    void loadHistory(business.id);
+  };
+
+  const closeBusiness = () => {
+    if (working) return;
+
+    setSelectedBusiness(null);
+    setHistory([]);
+    setStatusAction(null);
+    setStatusReason("");
+    setActionError("");
+  };
+
+  const beginStatusAction = (status: BusinessStatus) => {
+    setStatusAction(status);
+    setStatusReason("");
+    setActionError("");
+  };
+
+  const cancelStatusAction = () => {
+    if (working) return;
+
+    setStatusAction(null);
+    setStatusReason("");
+    setActionError("");
+  };
+
+  const confirmStatusAction = async () => {
+    if (!selectedBusiness || !statusAction || working) return;
+
+    const reason = statusReason.trim();
+
+    if (statusAction === "Suspended" && reason.length < 8) {
+      setActionError(
+        "Enter a clear suspension reason with at least 8 characters."
+      );
+      return;
+    }
+
+    try {
+      setWorking(true);
+      setActionError("");
+
+      await setAdminBusinessStatus(
+        selectedBusiness.id,
+        statusAction,
+        reason
+      );
+
+      await Promise.all([
+        loadPage(true),
+        loadHistory(selectedBusiness.id),
+      ]);
+
+      setStatusAction(null);
+      setStatusReason("");
+      setNotice(
+        statusAction === "Active"
+          ? `${selectedBusiness.name} was reactivated.`
+          : `${selectedBusiness.name} was suspended.`
+      );
+      window.setTimeout(() => setNotice(""), 4500);
+      window.dispatchEvent(new Event("cargo:businesses-changed"));
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update the business status."
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
 
   const filteredBusinesses = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -263,12 +251,16 @@ export default function Businesses() {
       const matchesFilter =
         selectedFilter === "All" ||
         business.status === selectedFilter;
-
       const matchesSearch =
         !query ||
-        business.name.toLowerCase().includes(query) ||
-        business.representative.toLowerCase().includes(query) ||
-        business.email.toLowerCase().includes(query);
+        [
+          business.businessCode,
+          business.name,
+          business.representativeName,
+          business.email,
+          business.phone,
+          business.address,
+        ].some((value) => value.toLowerCase().includes(query));
 
       return matchesFilter && matchesSearch;
     });
@@ -277,42 +269,39 @@ export default function Businesses() {
   const activeCount = businesses.filter(
     (business) => business.status === "Active"
   ).length;
-
-  const suspendedCount = businesses.filter(
-    (business) => business.status === "Suspended"
-  ).length;
-
-  const updateStatus = (status: BusinessStatus) => {
-    if (!selectedBusiness) return;
-
-    setBusinesses((current) =>
-      current.map((business) =>
-        business.id === selectedBusiness.id
-          ? { ...business, status }
-          : business
-      )
-    );
-
-    setSelectedBusiness({
-      ...selectedBusiness,
-      status,
-    });
-  };
+  const suspendedCount = businesses.length - activeCount;
 
   return (
     <>
+      {notice && <div className="business-notice">{notice}</div>}
+
       <div className="page-heading">
         <div>
           <p className="eyebrow">REGISTERED COMPANIES</p>
           <h2>Businesses</h2>
           <p className="page-description">
-            Monitor approved cargo businesses and account status.
+            Monitor live cargo businesses, services, and account status.
           </p>
         </div>
 
-        <div className="business-header-badge">
-          <BriefcaseBusiness size={17} />
-          <span>{businesses.length} Registered</span>
+        <div className="business-heading-actions">
+          <button
+            type="button"
+            className="business-refresh-button"
+            onClick={() => void loadPage(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw
+              size={16}
+              className={refreshing ? "spin" : ""}
+            />
+            Refresh data
+          </button>
+
+          <div className="business-header-badge">
+            <BriefcaseBusiness size={17} />
+            <span>{businesses.length} Registered</span>
+          </div>
         </div>
       </div>
 
@@ -323,14 +312,12 @@ export default function Businesses() {
           icon={<BriefcaseBusiness size={22} />}
           tone="blue"
         />
-
         <BusinessStat
           title="Active"
           value={activeCount}
           icon={<CheckCircle2 size={22} />}
           tone="green"
         />
-
         <BusinessStat
           title="Suspended"
           value={suspendedCount}
@@ -343,15 +330,13 @@ export default function Businesses() {
         <div className="businesses-toolbar">
           <div className="businesses-search">
             <Search size={18} />
-
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search business, representative, or email..."
+              placeholder="Search business, code, representative, or email..."
             />
-
             {search && (
-              <button onClick={() => setSearch("")}>
+              <button type="button" onClick={() => setSearch("")}>
                 <X size={17} />
               </button>
             )}
@@ -360,6 +345,7 @@ export default function Businesses() {
           <div className="business-filters">
             {filters.map((filter) => (
               <button
+                type="button"
                 key={filter}
                 className={
                   selectedFilter === filter
@@ -383,87 +369,103 @@ export default function Businesses() {
                 : " businesses found"}
             </span>
           </div>
-
           <span>Showing: {selectedFilter}</span>
         </div>
 
-        <div className="business-table-wrap">
-          <table className="business-table">
-            <thead>
-              <tr>
-                <th>Business</th>
-                <th>Representative</th>
-                <th>Destinations</th>
-                <th>Shipments</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
+        {pageError && (
+          <div className="business-page-message error">
+            <AlertCircle size={22} />
+            <div>
+              <strong>Unable to load businesses</strong>
+              <span>{pageError}</span>
+            </div>
+            <button type="button" onClick={() => void loadPage()}>
+              Try again
+            </button>
+          </div>
+        )}
 
-            <tbody>
-              {filteredBusinesses.map((business) => (
-                <tr key={business.id}>
-                  <td>
-                    <div className="business-company-cell">
-                      <div className="business-table-logo">
-                        <BriefcaseBusiness size={20} />
-                      </div>
-
-                      <div>
-                        <strong>{business.name}</strong>
-                        <span>{business.id}</span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td>
-                    <div className="business-contact-cell">
-                      <strong>{business.representative}</strong>
-                      <span>{business.email}</span>
-                    </div>
-                  </td>
-
-                  <td>
-                    <div className="business-destination-count">
-                      <MapPin size={14} />
-                      {business.destinations.length}
-                    </div>
-                  </td>
-
-                  <td>{business.shipments}</td>
-
-                  <td>
-                    <BusinessStatusBadge status={business.status} />
-                  </td>
-
-                  <td className="business-action-cell">
-                    <button
-                      className="view-business-button"
-                      onClick={() => setSelectedBusiness(business)}
-                    >
-                      <Eye size={16} />
-                      Manage
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredBusinesses.length === 0 && (
+        {!pageError && loading ? (
+          <div className="business-page-message">
+            <Loader2 size={26} className="spin" />
+            <strong>Loading live business records...</strong>
+          </div>
+        ) : (
+          <div className="business-table-wrap">
+            <table className="business-table">
+              <thead>
                 <tr>
-                  <td colSpan={6}>
-                    <div className="businesses-empty">
-                      <BriefcaseBusiness size={34} />
-                      <strong>No businesses found</strong>
-                      <span>
-                        Try changing your search or filter.
-                      </span>
-                    </div>
-                  </td>
+                  <th>Business</th>
+                  <th>Representative</th>
+                  <th>Destinations</th>
+                  <th>Bookings</th>
+                  <th>Status</th>
+                  <th />
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+
+              <tbody>
+                {filteredBusinesses.map((business) => (
+                  <tr key={business.id}>
+                    <td>
+                      <div className="business-company-cell">
+                        <BusinessLogo business={business} compact />
+                        <div>
+                          <strong>{business.name}</strong>
+                          <span>{business.businessCode}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="business-contact-cell">
+                        <strong>{business.representativeName}</strong>
+                        <span>{business.email}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="business-destination-count">
+                        <MapPin size={14} />
+                        {business.destinationsCount}
+                      </div>
+                    </td>
+                    <td>{business.bookingsCount}</td>
+                    <td>
+                      <BusinessStatusBadge status={business.status} />
+                    </td>
+                    <td className="business-action-cell">
+                      <button
+                        type="button"
+                        className="view-business-button"
+                        onClick={() => openBusiness(business)}
+                      >
+                        <Eye size={16} />
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+                {!pageError &&
+                  !loading &&
+                  filteredBusinesses.length === 0 && (
+                    <tr>
+                      <td colSpan={6}>
+                        <div className="businesses-empty">
+                          <BriefcaseBusiness size={34} />
+                          <strong>No businesses found</strong>
+                          <span>
+                            {businesses.length === 0
+                              ? "No approved business accounts exist yet."
+                              : "Try changing your search or filter."}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {selectedBusiness && (
@@ -473,31 +475,38 @@ export default function Businesses() {
               <div>
                 <p className="eyebrow">REGISTERED BUSINESS</p>
                 <h3>Business Details</h3>
-                <span>{selectedBusiness.id}</span>
+                <span>{selectedBusiness.businessCode}</span>
               </div>
-
               <button
+                type="button"
                 className="modal-close"
-                onClick={() => setSelectedBusiness(null)}
+                onClick={closeBusiness}
+                disabled={working}
+                aria-label="Close business details"
               >
                 <X size={20} />
               </button>
             </div>
 
             <div className="application-modal-body">
-              <div className="business-detail-hero">
-                <div className="business-detail-logo">
-                  <BriefcaseBusiness size={28} />
-                </div>
-
-                <div>
+              <div
+                className={`business-detail-hero ${
+                  selectedBusiness.coverUrl ? "has-cover" : ""
+                }`}
+                style={
+                  selectedBusiness.coverUrl
+                    ? {
+                        backgroundImage: `linear-gradient(90deg, rgba(18, 59, 93, 0.96), rgba(18, 59, 93, 0.72)), url("${selectedBusiness.coverUrl}")`,
+                      }
+                    : undefined
+                }
+              >
+                <BusinessLogo business={selectedBusiness} />
+                <div className="business-hero-copy">
                   <h3>{selectedBusiness.name}</h3>
-                  <p>{selectedBusiness.representative}</p>
+                  <p>{selectedBusiness.representativeName}</p>
                 </div>
-
-                <BusinessStatusBadge
-                  status={selectedBusiness.status}
-                />
+                <BusinessStatusBadge status={selectedBusiness.status} />
               </div>
 
               <div className="detail-grid">
@@ -506,13 +515,11 @@ export default function Businesses() {
                   label="Email Address"
                   value={selectedBusiness.email}
                 />
-
                 <BusinessDetailCard
                   icon={<Phone size={18} />}
                   label="Phone Number"
                   value={selectedBusiness.phone}
                 />
-
                 <BusinessDetailCard
                   icon={<MapPin size={18} />}
                   label="Business Address"
@@ -528,98 +535,233 @@ export default function Businesses() {
                 </div>
               </div>
 
-              <div className="application-detail-section">
-                <h4>Destinations</h4>
-
-                <div className="application-tags">
-                  {selectedBusiness.destinations.length > 0 ? (
-                    selectedBusiness.destinations.map((destination) => (
-                      <span
-                        className="application-tag blue-tag"
-                        key={destination}
-                      >
-                        <MapPin size={13} />
-                        {destination}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="application-tag blue-tag">
-                      Not configured yet
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="application-detail-section">
-                <h4>Cargo Types</h4>
-
-                <div className="application-tags">
-                  {selectedBusiness.cargoTypes.length > 0 ? (
-                    selectedBusiness.cargoTypes.map((cargoType) => (
-                      <span className="application-tag" key={cargoType}>
-                        {cargoType}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="application-tag">
-                      Not configured yet
-                    </span>
-                  )}
-                </div>
-              </div>
+              <TagSection
+                title="Destinations"
+                values={selectedBusiness.destinations}
+                icon={<MapPin size={13} />}
+                tone="blue-tag"
+              />
+              <TagSection
+                title="Cargo Types"
+                values={selectedBusiness.cargoTypes}
+              />
 
               <div className="business-activity-grid">
                 <div>
-                  <strong>{selectedBusiness.shipments}</strong>
-                  <span>Shipments</span>
+                  <strong>{selectedBusiness.bookingsCount}</strong>
+                  <span>Bookings</span>
                 </div>
-
                 <div>
-                  <strong>{selectedBusiness.rates}</strong>
-                  <span>Listed Rates</span>
+                  <strong>{selectedBusiness.ratesCount}</strong>
+                  <span>Available Rates</span>
                 </div>
-
                 <div>
-                  <strong>{selectedBusiness.destinations.length}</strong>
-                  <span>Destinations</span>
+                  <strong>{selectedBusiness.galleryCount}</strong>
+                  <span>Gallery Photos</span>
                 </div>
-
                 <div>
-                  <strong>{selectedBusiness.approvedDate}</strong>
+                  <strong>{formatDate(selectedBusiness.approvedAt)}</strong>
                   <span>Approved</span>
                 </div>
               </div>
 
-              <div className="business-permission-note">
-                Admin can currently monitor business information and
-                account status. Editing rates, destinations, and services
-                is intentionally not enabled yet.
+              <div className="business-history-section">
+                <div className="business-section-heading">
+                  <div>
+                    <Clock3 size={17} />
+                    <h4>Account status history</h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadHistory(selectedBusiness.id)}
+                    disabled={historyLoading}
+                  >
+                    <RefreshCw
+                      size={13}
+                      className={historyLoading ? "spin" : ""}
+                    />
+                    Refresh
+                  </button>
+                </div>
+
+                {historyError ? (
+                  <div className="business-history-empty error">
+                    {historyError}
+                  </div>
+                ) : historyLoading ? (
+                  <div className="business-history-empty">
+                    Loading status history...
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="business-history-empty">
+                    No administrative status changes yet.
+                  </div>
+                ) : (
+                  <div className="business-history-list">
+                    {history.map((entry) => (
+                      <div className="business-history-item" key={entry.id}>
+                        <span
+                          className={`business-history-dot ${entry.newStatus.toLowerCase()}`}
+                        />
+                        <div>
+                          <strong>
+                            {entry.oldStatus
+                              ? `${entry.oldStatus} → ${entry.newStatus}`
+                              : entry.newStatus}
+                          </strong>
+                          <p>{entry.reason || "No reason provided."}</p>
+                          <span>{formatDateTime(entry.changedAt)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              <div className="business-permission-note">
+                Account status changes are performed through an
+                administrator-only Supabase function and recorded in the
+                audit history. Rates and services remain managed by the
+                business owner.
+              </div>
+
+              {statusAction && (
+                <div
+                  className={`business-status-action ${statusAction.toLowerCase()}`}
+                >
+                  <div>
+                    <strong>
+                      {statusAction === "Suspended"
+                        ? "Suspend this business?"
+                        : "Reactivate this business?"}
+                    </strong>
+                    <span>
+                      {statusAction === "Suspended"
+                        ? "Suspended companies are immediately hidden from customer discovery and cannot receive new bookings."
+                        : "The company becomes visible to customers and can receive new bookings again."}
+                    </span>
+                  </div>
+
+                  <label htmlFor="business-status-reason">
+                    {statusAction === "Suspended"
+                      ? "Suspension reason"
+                      : "Audit note (optional)"}
+                  </label>
+                  <textarea
+                    id="business-status-reason"
+                    value={statusReason}
+                    onChange={(event) => {
+                      setStatusReason(event.target.value);
+                      setActionError("");
+                    }}
+                    maxLength={500}
+                    placeholder={
+                      statusAction === "Suspended"
+                        ? "Explain why the account is being suspended..."
+                        : "Add an optional note for the audit history..."
+                    }
+                  />
+                  <div className="business-reason-meta">
+                    <span>{statusReason.length}/500</span>
+                    {statusAction === "Suspended" && (
+                      <span>Minimum 8 characters</span>
+                    )}
+                  </div>
+                  {actionError && (
+                    <div className="business-action-error">
+                      <AlertCircle size={15} />
+                      {actionError}
+                    </div>
+                  )}
+                  <div className="business-action-buttons">
+                    <button
+                      type="button"
+                      className="business-action-cancel"
+                      onClick={cancelStatusAction}
+                      disabled={working}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        statusAction === "Suspended"
+                          ? "suspend-business-button"
+                          : "reactivate-business-button"
+                      }
+                      onClick={() => void confirmStatusAction()}
+                      disabled={
+                        working ||
+                        (statusAction === "Suspended" &&
+                          statusReason.trim().length < 8)
+                      }
+                    >
+                      {working ? (
+                        <Loader2 size={17} className="spin" />
+                      ) : statusAction === "Suspended" ? (
+                        <PauseCircle size={17} />
+                      ) : (
+                        <CheckCircle2 size={17} />
+                      )}
+                      {working
+                        ? "Saving..."
+                        : statusAction === "Suspended"
+                          ? "Confirm suspension"
+                          : "Confirm reactivation"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="application-modal-footer">
-              {selectedBusiness.status === "Active" ? (
-                <button
-                  className="suspend-business-button"
-                  onClick={() => updateStatus("Suspended")}
-                >
-                  <PauseCircle size={18} />
-                  Suspend Business
-                </button>
-              ) : (
-                <button
-                  className="reactivate-business-button"
-                  onClick={() => updateStatus("Active")}
-                >
-                  <CheckCircle2 size={18} />
-                  Reactivate Business
-                </button>
-              )}
+              {!statusAction &&
+                (selectedBusiness.status === "Active" ? (
+                  <button
+                    type="button"
+                    className="suspend-business-button"
+                    onClick={() => beginStatusAction("Suspended")}
+                  >
+                    <PauseCircle size={18} />
+                    Suspend Business
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="reactivate-business-button"
+                    onClick={() => beginStatusAction("Active")}
+                  >
+                    <CheckCircle2 size={18} />
+                    Reactivate Business
+                  </button>
+                ))}
             </div>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function BusinessLogo({
+  business,
+  compact = false,
+}: {
+  business: AdminBusiness;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={
+        compact ? "business-table-logo" : "business-detail-logo"
+      }
+    >
+      {business.logoUrl ? (
+        <img src={business.logoUrl} alt={`${business.name} logo`} />
+      ) : (
+        <BriefcaseBusiness size={compact ? 20 : 28} />
+      )}
+    </div>
   );
 }
 
@@ -631,13 +773,12 @@ function BusinessStat({
 }: {
   title: string;
   value: number;
-  icon: React.ReactNode;
+  icon: ReactNode;
   tone: string;
 }) {
   return (
     <div className="business-stat-card">
       <div className={`application-stat-icon ${tone}`}>{icon}</div>
-
       <div>
         <strong>{value}</strong>
         <span>{title}</span>
@@ -646,11 +787,7 @@ function BusinessStat({
   );
 }
 
-function BusinessStatusBadge({
-  status,
-}: {
-  status: BusinessStatus;
-}) {
+function BusinessStatusBadge({ status }: { status: BusinessStatus }) {
   return (
     <span className={`business-status ${status.toLowerCase()}`}>
       <span />
@@ -665,7 +802,7 @@ function BusinessDetailCard({
   value,
   wide,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
   wide?: boolean;
@@ -673,10 +810,45 @@ function BusinessDetailCard({
   return (
     <div className={`detail-card ${wide ? "wide" : ""}`}>
       <div className="detail-card-icon">{icon}</div>
-
       <div>
         <span>{label}</span>
         <strong>{value}</strong>
+      </div>
+    </div>
+  );
+}
+
+function TagSection({
+  title,
+  values,
+  icon,
+  tone = "",
+}: {
+  title: string;
+  values: string[];
+  icon?: ReactNode;
+  tone?: string;
+}) {
+  return (
+    <div className="application-detail-section">
+      <h4>{title}</h4>
+      <div className="application-tags">
+        {values.length > 0 ? (
+          values.map((value) => (
+            <span
+              className={`application-tag ${tone}`.trim()}
+              key={value}
+            >
+              {icon}
+              {value}
+            </span>
+          ))
+        ) : (
+          <span className={`application-tag ${tone}`.trim()}>
+            <ImageIcon size={13} />
+            Not configured yet
+          </span>
+        )}
       </div>
     </div>
   );
