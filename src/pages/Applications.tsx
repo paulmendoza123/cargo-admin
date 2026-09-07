@@ -426,7 +426,19 @@ export default function Applications() {
     }, []);
 
   useEffect(() => {
-    void loadApplications();
+    const initialLoad =
+      window.setTimeout(
+        () => {
+          void loadApplications();
+        },
+        0
+      );
+
+    return () => {
+      window.clearTimeout(
+        initialLoad
+      );
+    };
   }, [loadApplications]);
 
   const selectedApplication =

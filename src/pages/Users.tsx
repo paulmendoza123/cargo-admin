@@ -307,69 +307,91 @@ export default function Users() {
   }, []);
 
   useEffect(() => {
-    void loadUsers();
+    const initialLoad =
+      window.setTimeout(
+        () => {
+          void loadUsers();
+        },
+        0
+      );
+
+    return () => {
+      window.clearTimeout(
+        initialLoad
+      );
+    };
   }, [loadUsers]);
+
+  const selectedIdentityDocument =
+    selectedUser?.identityDocument;
 
   useEffect(() => {
     let active = true;
 
-    const document = selectedUser?.identityDocument;
+    const loadPreview =
+      window.setTimeout(
+        () => {
+          setIdentityPreviewUrl("");
+          setIdentityPreviewError("");
 
-    setIdentityPreviewUrl("");
-    setIdentityPreviewError("");
+          if (!selectedIdentityDocument) {
+            setIdentityPreviewLoading(false);
+            return;
+          }
 
-    if (!document) {
-      setIdentityPreviewLoading(false);
-      return () => {
-        active = false;
-      };
-    }
+          setIdentityPreviewLoading(true);
 
-    setIdentityPreviewLoading(true);
+          void supabase.storage
+            .from(CUSTOMER_ID_BUCKET)
+            .createSignedUrl(
+              selectedIdentityDocument.storagePath,
+              300
+            )
+            .then(({ data, error }) => {
+              if (!active) {
+                return;
+              }
 
-    void supabase.storage
-      .from(CUSTOMER_ID_BUCKET)
-      .createSignedUrl(document.storagePath, 300)
-      .then(({ data, error }) => {
-        if (!active) {
-          return;
-        }
+              if (error) {
+                throw error;
+              }
 
-        if (error) {
-          throw error;
-        }
+              setIdentityPreviewUrl(
+                data.signedUrl
+              );
+            })
+            .catch((error: unknown) => {
+              if (!active) {
+                return;
+              }
 
-        setIdentityPreviewUrl(data.signedUrl);
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return;
-        }
+              console.error(
+                "Unable to load identity document:",
+                error
+              );
 
-        console.error(
-          "Unable to load identity document:",
-          error
-        );
-
-        setIdentityPreviewError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load the private ID image."
-        );
-      })
-      .finally(() => {
-        if (active) {
-          setIdentityPreviewLoading(false);
-        }
-      });
+              setIdentityPreviewError(
+                error instanceof Error
+                  ? error.message
+                  : "Unable to load the private ID image."
+              );
+            })
+            .finally(() => {
+              if (active) {
+                setIdentityPreviewLoading(
+                  false
+                );
+              }
+            });
+        },
+        0
+      );
 
     return () => {
       active = false;
+      window.clearTimeout(loadPreview);
     };
-  }, [
-    selectedUser?.identityDocument?.id,
-    selectedUser?.identityDocument?.storagePath,
-  ]);
+  }, [selectedIdentityDocument]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();

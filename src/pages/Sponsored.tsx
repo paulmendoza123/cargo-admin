@@ -1,472 +1,319 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import type {
-  CSSProperties,
-} from "react";
+import type { ReactNode } from "react";
 import {
-  AlertTriangle,
+  AlertCircle,
+  BadgeCheck,
+  Ban,
   Building2,
   CalendarDays,
   CheckCircle2,
   Clock3,
   CreditCard,
   Eye,
-  Filter,
-  ImageIcon,
+  EyeOff,
+  FileImage,
+  Loader2,
   Mail,
   Megaphone,
+  PackageOpen,
+  Pencil,
   Phone,
-  Receipt,
+  ReceiptText,
+  RefreshCw,
+  Save,
   Search,
-  ShieldCheck,
+  Settings2,
   Sparkles,
   UserRound,
   X,
   XCircle,
 } from "lucide-react";
 
-type SponsorshipStatus =
-  | "Pending"
-  | "Active"
-  | "Rejected"
-  | "Expired";
+import {
+  approveSponsorshipRequest,
+  createPaymentProofUrl,
+  loadAdminSponsorshipCheckout,
+  loadAdminSponsorshipPackages,
+  loadAdminSponsorshipRequests,
+  rejectSponsorshipRequest,
+  saveSponsorshipCheckout,
+  saveSponsorshipPackage,
+  setSponsoredPlacementEnabled,
+} from "../lib/sponsorships";
+import type {
+  AdminSponsorshipRequest,
+  SponsorshipCheckout,
+  SponsorshipDisplayStatus,
+  SponsorshipPackage,
+} from "../lib/sponsorships";
+import "./Sponsored.css";
 
-type SponsorshipRequest = {
-  id: string;
-  companyId: string;
-  companyName: string;
-  representativeName: string;
-  email: string;
-  phone: string;
+type PageTab = "requests" | "settings";
+type RequestFilter = "All" | SponsorshipDisplayStatus;
 
-  packageName: "Sponsored Listing";
-  requestedDurationDays: number;
-  packagePrice: number;
-
-  paymentMethod: "GCash";
-  paymentReference: string;
-  paymentProofName: string;
-  paymentVerified: boolean;
-  paymentVerifiedAt?: string;
-
-  requestedAt: string;
-  status: SponsorshipStatus;
-
-  approvedAt?: string;
-  startDate?: string;
-  endDate?: string;
-
-  rejectedAt?: string;
-  rejectionReason?: string;
+type PackageForm = {
+  name: string;
+  durationDays: string;
+  price: string;
+  description: string;
+  isActive: boolean;
 };
 
-const COLORS = {
-  navy: "#123B5D",
-  blue: "#2F6F91",
-  lightBlue: "#EAF4F8",
-  gold: "#F5B82E",
-  background: "#F7F9FB",
-  white: "#FFFFFF",
-  text: "#0F172A",
-  muted: "#64748B",
-  border: "#DCE5EA",
-  success: "#16A34A",
-  danger: "#DC2626",
-  warning: "#D97706",
+type CheckoutForm = {
+  accountName: string;
+  accountNumber: string;
+  instructions: string;
+  isEnabled: boolean;
 };
 
-const STORAGE_KEY =
-  "cargo-track-admin-sponsored-listings-v1";
+const EMPTY_CHECKOUT: CheckoutForm = {
+  accountName: "",
+  accountNumber: "",
+  instructions: "",
+  isEnabled: false,
+};
 
-const INITIAL_REQUESTS:
-  SponsorshipRequest[] = [
-    {
-      id: "SP-2026-0001",
-      companyId: "abc",
-      companyName:
-        "ABC Cargo Express",
-      representativeName:
-        "Juan Santos",
-      email:
-        "abcargo@example.com",
-      phone: "09171234567",
-      packageName:
-        "Sponsored Listing",
-      requestedDurationDays: 30,
-      packagePrice: 999,
-      paymentMethod: "GCash",
-      paymentReference:
-        "1000123456789",
-      paymentProofName:
-        "gcash-receipt-abc.jpg",
-      paymentVerified: false,
-      requestedAt:
-        "2026-08-29T08:30:00.000Z",
-      status: "Pending",
-    },
-    {
-      id: "SP-2026-0002",
-      companyId: "xyz",
-      companyName:
-        "XYZ Logistics",
-      representativeName:
-        "Andrea Reyes",
-      email:
-        "xyzlogistics@example.com",
-      phone: "09181234567",
-      packageName:
-        "Sponsored Listing",
-      requestedDurationDays: 30,
-      packagePrice: 999,
-      paymentMethod: "GCash",
-      paymentReference:
-        "1000987654321",
-      paymentProofName:
-        "gcash-receipt-xyz.jpg",
-      paymentVerified: true,
-      paymentVerifiedAt:
-        "2026-08-24T09:10:00.000Z",
-      requestedAt:
-        "2026-08-24T06:15:00.000Z",
-      status: "Active",
-      approvedAt:
-        "2026-08-24T09:20:00.000Z",
-      startDate:
-        "2026-08-24T09:20:00.000Z",
-      endDate:
-        "2026-09-23T09:20:00.000Z",
-    },
-    {
-      id: "SP-2026-0003",
-      companyId: "island",
-      companyName:
-        "Island Cargo Services",
-      representativeName:
-        "Paolo Mendoza",
-      email:
-        "islandcargo@example.com",
-      phone: "09201234567",
-      packageName:
-        "Sponsored Listing",
-      requestedDurationDays: 15,
-      packagePrice: 549,
-      paymentMethod: "GCash",
-      paymentReference:
-        "1000456123789",
-      paymentProofName:
-        "gcash-receipt-island.jpg",
-      paymentVerified: false,
-      requestedAt:
-        "2026-08-20T02:40:00.000Z",
-      status: "Rejected",
-      rejectedAt:
-        "2026-08-20T04:05:00.000Z",
-      rejectionReason:
-        "Please confirm the sponsorship request details before activation.",
-    },
-    {
-      id: "SP-2026-0004",
-      companyId: "harbor",
-      companyName:
-        "Harbor Cargo Palawan",
-      representativeName:
-        "Ana Mendoza",
-      email:
-        "harborcargo@example.com",
-      phone: "09301234567",
-      packageName:
-        "Sponsored Listing",
-      requestedDurationDays: 7,
-      packagePrice: 299,
-      paymentMethod: "GCash",
-      paymentReference:
-        "1000765432198",
-      paymentProofName:
-        "gcash-receipt-harbor.jpg",
-      paymentVerified: true,
-      paymentVerifiedAt:
-        "2026-08-10T05:00:00.000Z",
-      requestedAt:
-        "2026-08-10T03:00:00.000Z",
-      status: "Expired",
-      approvedAt:
-        "2026-08-10T05:10:00.000Z",
-      startDate:
-        "2026-08-10T05:10:00.000Z",
-      endDate:
-        "2026-08-17T05:10:00.000Z",
-    },
-  ];
+const FILTERS: RequestFilter[] = [
+  "All",
+  "Pending",
+  "Active",
+  "Scheduled",
+  "Disabled",
+  "Expired",
+  "Rejected",
+  "Cancelled",
+];
 
-function loadRequests() {
+function formatDateTime(value?: string) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatPeso(value: number) {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function receiptName(storagePath: string) {
+  const value =
+    storagePath.split("/").at(-1) ||
+    "Payment receipt";
+
   try {
-    const raw =
-      window.localStorage.getItem(
-        STORAGE_KEY
-      );
-
-    if (!raw) {
-      return INITIAL_REQUESTS;
-    }
-
-    const parsed =
-      JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) {
-      return INITIAL_REQUESTS;
-    }
-
-    return parsed.map(
-      (item) => {
-        const request =
-          item as Partial<SponsorshipRequest> &
-            Pick<
-              SponsorshipRequest,
-              | "id"
-              | "requestedDurationDays"
-              | "status"
-            >;
-
-        const legacyVerified =
-          request.status === "Active" ||
-          request.status === "Expired";
-
-        return {
-          ...request,
-          packagePrice:
-            request.packagePrice ??
-            getPackagePrice(
-              request.requestedDurationDays
-            ),
-          paymentMethod:
-            request.paymentMethod ?? "GCash",
-          paymentReference:
-            request.paymentReference ??
-            `SAMPLE-${request.id}`,
-          paymentProofName:
-            request.paymentProofName ??
-            "sample-gcash-receipt.jpg",
-          paymentVerified:
-            request.paymentVerified ??
-            legacyVerified,
-        } as SponsorshipRequest;
-      }
-    );
+    return decodeURIComponent(value);
   } catch {
-    return INITIAL_REQUESTS;
+    return value;
   }
 }
 
-function formatDateTime(
-  value?: string
-) {
-  if (!value) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat(
-    "en-PH",
-    {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }
-  ).format(new Date(value));
-}
-
-function formatDate(
-  value?: string
-) {
-  if (!value) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat(
-    "en-PH",
-    {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }
-  ).format(new Date(value));
-}
-
-function formatPeso(
-  value: number
-) {
-  return new Intl.NumberFormat(
-    "en-PH",
-    {
-      style: "currency",
-      currency: "PHP",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }
-  ).format(value);
-}
-
-function getPackagePrice(
-  duration: number
-) {
-  if (duration === 7) {
-    return 299;
-  }
-
-  if (duration === 15) {
-    return 549;
-  }
-
-  return 999;
-}
-
-function addDays(
-  value: Date,
-  days: number
-) {
-  const next =
-    new Date(value);
-
-  next.setDate(
-    next.getDate() + days
-  );
-
-  return next;
-}
-
-function normalizeExpired(
-  requests:
-    SponsorshipRequest[]
-) {
-  const now =
-    Date.now();
-
-  return requests.map(
-    (request) => {
-      if (
-        request.status ===
-          "Active" &&
-        request.endDate &&
-        new Date(
-          request.endDate
-        ).getTime() < now
-      ) {
-        return {
-          ...request,
-          status:
-            "Expired" as const,
-        };
-      }
-
-      return request;
-    }
-  );
-}
-
-function statusConfig(
-  status: SponsorshipStatus
-) {
+function statusTone(status: SponsorshipDisplayStatus) {
   if (status === "Active") {
-    return {
-      color: COLORS.success,
-      background: "#F0FDF4",
-      icon: CheckCircle2,
-    };
+    return "success";
   }
 
-  if (
-    status === "Rejected"
-  ) {
-    return {
-      color: COLORS.danger,
-      background: "#FFF1F2",
-      icon: XCircle,
-    };
+  if (status === "Pending" || status === "Scheduled") {
+    return "warning";
   }
 
-  if (
-    status === "Expired"
-  ) {
-    return {
-      color: COLORS.muted,
-      background: "#F1F5F9",
-      icon: Clock3,
-    };
+  if (status === "Rejected" || status === "Cancelled") {
+    return "danger";
+  }
+
+  if (status === "Disabled" || status === "Expired") {
+    return "muted";
+  }
+
+  return "info";
+}
+
+function checkoutToForm(
+  checkout: SponsorshipCheckout | null
+): CheckoutForm {
+  if (!checkout) {
+    return EMPTY_CHECKOUT;
   }
 
   return {
-    color: COLORS.warning,
-    background: "#FFF7ED",
-    icon: Clock3,
+    accountName: checkout.accountName,
+    accountNumber: checkout.accountNumber,
+    instructions: checkout.instructions,
+    isEnabled: checkout.isEnabled,
   };
 }
 
 export default function Sponsored() {
-  const [
-    requests,
-    setRequests,
-  ] = useState<
-    SponsorshipRequest[]
-  >(() =>
-    normalizeExpired(
-      loadRequests()
-    )
-  );
+  const [tab, setTab] =
+    useState<PageTab>("requests");
+  const [requests, setRequests] =
+    useState<AdminSponsorshipRequest[]>([]);
+  const [packages, setPackages] =
+    useState<SponsorshipPackage[]>([]);
+  const [checkout, setCheckout] =
+    useState<SponsorshipCheckout | null>(null);
+  const [loading, setLoading] =
+    useState(true);
+  const [working, setWorking] =
+    useState(false);
+  const [pageError, setPageError] =
+    useState("");
+  const [notice, setNotice] =
+    useState("");
 
-  const [
-    search,
-    setSearch,
-  ] = useState("");
+  const [search, setSearch] =
+    useState("");
+  const [filter, setFilter] =
+    useState<RequestFilter>("All");
+  const [selectedId, setSelectedId] =
+    useState<string | null>(null);
+  const [paymentReviewed, setPaymentReviewed] =
+    useState(false);
 
-  const [
-    filter,
-    setFilter,
-  ] =
-    useState<
-      "All" |
-      SponsorshipStatus
-    >("All");
+  const [rejectVisible, setRejectVisible] =
+    useState(false);
+  const [rejectionReason, setRejectionReason] =
+    useState("");
 
-  const [
-    selectedId,
-    setSelectedId,
-  ] = useState<
-    string | null
-  >(null);
+  const [editingPackageId, setEditingPackageId] =
+    useState<string | null>(null);
+  const [packageForm, setPackageForm] =
+    useState<PackageForm | null>(null);
 
-  const [
-    rejectionReason,
-    setRejectionReason,
-  ] = useState("");
+  const [checkoutForm, setCheckoutForm] =
+    useState<CheckoutForm>(EMPTY_CHECKOUT);
+  const [showAccountNumber, setShowAccountNumber] =
+    useState(false);
 
-  const [
-    rejectVisible,
-    setRejectVisible,
-  ] = useState(false);
+  const publishChange = useCallback(() => {
+    window.dispatchEvent(
+      new Event("cargo:sponsorships-changed")
+    );
+  }, []);
 
-  const [
-    proofVisible,
-    setProofVisible,
-  ] = useState(false);
+  const loadPage = useCallback(async () => {
+    setLoading(true);
+    setPageError("");
+
+    try {
+      const [
+        nextRequests,
+        nextPackages,
+        nextCheckout,
+      ] = await Promise.all([
+        loadAdminSponsorshipRequests(),
+        loadAdminSponsorshipPackages(),
+        loadAdminSponsorshipCheckout(),
+      ]);
+
+      setRequests(nextRequests);
+      setPackages(nextPackages);
+      setCheckout(nextCheckout);
+      setCheckoutForm(
+        checkoutToForm(nextCheckout)
+      );
+      publishChange();
+    } catch (error) {
+      console.error(
+        "Unable to load sponsorship management:",
+        error
+      );
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load sponsorship management."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [publishChange]);
+
+  const refreshRequests =
+    useCallback(async () => {
+      const nextRequests =
+        await loadAdminSponsorshipRequests();
+      setRequests(nextRequests);
+      publishChange();
+    }, [publishChange]);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(requests)
+    const initialLoad =
+      window.setTimeout(
+        () => {
+          void loadPage();
+        },
+        0
+      );
+
+    return () => {
+      window.clearTimeout(
+        initialLoad
+      );
+    };
+  }, [loadPage]);
+
+  useEffect(() => {
+    const refreshOnFocus = () => {
+      void loadPage();
+    };
+
+    window.addEventListener(
+      "focus",
+      refreshOnFocus
     );
-  }, [requests]);
+
+    return () => {
+      window.removeEventListener(
+        "focus",
+        refreshOnFocus
+      );
+    };
+  }, [loadPage]);
+
+  const openRequest = (
+    requestId: string
+  ) => {
+    setSelectedId(requestId);
+    setPaymentReviewed(false);
+    setRejectVisible(false);
+    setRejectionReason("");
+  };
+
+  const closeRequest = () => {
+    setSelectedId(null);
+    setPaymentReviewed(false);
+    setRejectVisible(false);
+    setRejectionReason("");
+  };
 
   const selectedRequest =
     useMemo(
       () =>
         requests.find(
           (request) =>
-            request.id ===
-            selectedId
+            request.id === selectedId
         ),
       [requests, selectedId]
     );
@@ -474,25 +321,22 @@ export default function Sponsored() {
   const filteredRequests =
     useMemo(() => {
       const query =
-        search
-          .trim()
-          .toLowerCase();
+        search.trim().toLowerCase();
 
       return requests.filter(
         (request) => {
           const matchesFilter =
             filter === "All" ||
-            request.status ===
-              filter;
-
+            request.status === filter;
           const matchesSearch =
             !query ||
             [
-              request.id,
-              request.companyName,
+              request.requestCode,
+              request.businessName,
               request.representativeName,
-              request.email,
-              request.phone,
+              request.businessEmail,
+              request.businessPhone,
+              request.packageName,
               request.paymentReference,
             ].some((value) =>
               value
@@ -506,1219 +350,1446 @@ export default function Sponsored() {
           );
         }
       );
-    }, [
-      requests,
-      filter,
-      search,
-    ]);
+    }, [filter, requests, search]);
 
-  const counts =
-    useMemo(
-      () => ({
-        all: requests.length,
-        pending:
-          requests.filter(
-            (request) =>
-              request.status ===
-              "Pending"
-          ).length,
-        active:
-          requests.filter(
-            (request) =>
-              request.status ===
-              "Active"
-          ).length,
-        rejected:
-          requests.filter(
-            (request) =>
-              request.status ===
-              "Rejected"
-          ).length,
-        expired:
-          requests.filter(
-            (request) =>
-              request.status ===
-              "Expired"
-          ).length,
-      }),
-      [requests]
+  const counts = useMemo(() => {
+    const count = (
+      status: SponsorshipDisplayStatus
+    ) =>
+      requests.filter(
+        (request) =>
+          request.status === status
+      ).length;
+
+    return {
+      all: requests.length,
+      pending: count("Pending"),
+      active: count("Active"),
+      scheduled: count("Scheduled"),
+      disabled: count("Disabled"),
+      expired: count("Expired"),
+      rejected: count("Rejected"),
+      cancelled: count("Cancelled"),
+    };
+  }, [requests]);
+
+  const filterCount = (
+    value: RequestFilter
+  ) => {
+    if (value === "All") return counts.all;
+    if (value === "Pending")
+      return counts.pending;
+    if (value === "Active")
+      return counts.active;
+    if (value === "Scheduled")
+      return counts.scheduled;
+    if (value === "Disabled")
+      return counts.disabled;
+    if (value === "Expired")
+      return counts.expired;
+    if (value === "Rejected")
+      return counts.rejected;
+    return counts.cancelled;
+  };
+
+  const showNotice = (
+    message: string
+  ) => {
+    setNotice(message);
+    window.setTimeout(
+      () => setNotice(""),
+      4500
     );
+  };
 
-  const approveSelected =
-    () => {
-      if (
-        !selectedRequest ||
-        selectedRequest.status ===
-          "Active"
-      ) {
-        return;
-      }
-
-      if (
-        !selectedRequest.paymentVerified
-      ) {
-        window.alert(
-          "Verify the submitted payment proof before approving this sponsorship request."
-        );
-        return;
-      }
-
-      const confirmed =
-        window.confirm(
-          `Approve sponsorship for ${selectedRequest.companyName}?\n\nThe sponsored listing will be activated for ${selectedRequest.requestedDurationDays} day(s).`
-        );
-
-      if (!confirmed) {
-        return;
-      }
-
-      const start =
-        new Date();
-
-      const end =
-        addDays(
-          start,
-          selectedRequest
-            .requestedDurationDays
-        );
-
-      setRequests(
-        (current) =>
-          current.map(
-            (request) =>
-              request.id ===
-              selectedRequest.id
-                ? {
-                    ...request,
-                    status:
-                      "Active",
-                    approvedAt:
-                      start.toISOString(),
-                    startDate:
-                      start.toISOString(),
-                    endDate:
-                      end.toISOString(),
-                    rejectedAt:
-                      undefined,
-                    rejectionReason:
-                      undefined,
-                  }
-                : request
-          )
+  const openReceipt = async (
+    request: AdminSponsorshipRequest
+  ) => {
+    const receiptWindow =
+      window.open(
+        "about:blank",
+        "_blank"
       );
-    };
 
-  const verifySelectedPayment =
-    () => {
-      if (!selectedRequest) {
-        return;
-      }
+    if (receiptWindow) {
+      receiptWindow.opener = null;
+      receiptWindow.document.title =
+        "Loading payment receipt...";
+    }
 
-      const confirmed =
-        window.confirm(
-          `Mark the ${formatPeso(
-            selectedRequest.packagePrice
-          )} ${selectedRequest.paymentMethod} payment from ${selectedRequest.companyName} as verified?`
+    try {
+      setWorking(true);
+      const url =
+        await createPaymentProofUrl(
+          request.paymentProofPath
         );
 
-      if (!confirmed) {
-        return;
+      if (receiptWindow) {
+        receiptWindow.location.replace(
+          url
+        );
+      } else {
+        window.open(
+          url,
+          "_blank",
+          "noopener,noreferrer"
+        );
       }
-
-      const verifiedAt =
-        new Date().toISOString();
-
-      setRequests((current) =>
-        current.map((request) =>
-          request.id === selectedRequest.id
-            ? {
-                ...request,
-                paymentVerified: true,
-                paymentVerifiedAt:
-                  verifiedAt,
-              }
-            : request
-        )
+    } catch (error) {
+      receiptWindow?.close();
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to open the payment receipt."
       );
-    };
+    } finally {
+      setWorking(false);
+    }
+  };
 
-  const openReject = () => {
-    if (!selectedRequest) {
+  const approveSelected = async () => {
+    if (
+      !selectedRequest ||
+      selectedRequest.status !==
+        "Pending" ||
+      working
+    ) {
       return;
     }
 
-    setRejectionReason(
-      selectedRequest
-        .rejectionReason ||
-        ""
-    );
+    if (!paymentReviewed) {
+      window.alert(
+        "Review the payment receipt and confirm the checklist first."
+      );
+      return;
+    }
 
-    setRejectVisible(true);
+    const confirmed =
+      window.confirm(
+        `Approve ${selectedRequest.requestCode} for ${selectedRequest.businessName}?\n\nThe ${selectedRequest.durationDays}-day sponsored placement starts after approval.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setWorking(true);
+      await approveSponsorshipRequest(
+        selectedRequest.id
+      );
+      await refreshRequests();
+      showNotice(
+        "Sponsorship approved and placement activated."
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to approve the sponsorship request."
+      );
+    } finally {
+      setWorking(false);
+    }
   };
 
-  const confirmReject =
-    () => {
-      if (!selectedRequest) {
-        return;
-      }
+  const confirmReject = async () => {
+    if (
+      !selectedRequest ||
+      selectedRequest.status !==
+        "Pending" ||
+      working
+    ) {
+      return;
+    }
 
-      if (
-        rejectionReason
-          .trim()
-          .length < 8
-      ) {
-        window.alert(
-          "Please enter a clear rejection reason."
-        );
-        return;
-      }
+    const reason =
+      rejectionReason.trim();
 
-      const now =
-        new Date()
-          .toISOString();
+    if (reason.length < 8) {
+      window.alert(
+        "Enter a clear rejection reason with at least 8 characters."
+      );
+      return;
+    }
 
-      setRequests(
-        (current) =>
-          current.map(
-            (request) =>
-              request.id ===
-              selectedRequest.id
-                ? {
-                    ...request,
-                    status:
-                      "Rejected",
-                    rejectedAt:
-                      now,
-                    rejectionReason:
-                      rejectionReason.trim(),
-                    approvedAt:
-                      undefined,
-                    startDate:
-                      undefined,
-                    endDate:
-                      undefined,
-                    paymentVerified: false,
-                    paymentVerifiedAt:
-                      undefined,
-                  }
-                : request
-          )
+    try {
+      setWorking(true);
+      await rejectSponsorshipRequest(
+        selectedRequest.id,
+        reason
+      );
+      await refreshRequests();
+      setRejectVisible(false);
+      setRejectionReason("");
+      showNotice(
+        "Sponsorship request rejected. The business can see the reason."
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to reject the sponsorship request."
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const togglePlacement = async (
+    request: AdminSponsorshipRequest
+  ) => {
+    if (
+      !request.placementId ||
+      working
+    ) {
+      return;
+    }
+
+    const nextEnabled =
+      !request.placementIsEnabled;
+    const confirmed =
+      window.confirm(
+        `${nextEnabled ? "Enable" : "Disable"} the sponsored placement for ${request.businessName}?`
       );
 
-      setRejectVisible(
-        false
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setWorking(true);
+      await setSponsoredPlacementEnabled(
+        request.placementId,
+        nextEnabled
       );
-      setRejectionReason(
+      await refreshRequests();
+      showNotice(
+        `Sponsored placement ${nextEnabled ? "enabled" : "disabled"}.`
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to update the sponsored placement."
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const startPackageEdit = (
+    item: SponsorshipPackage
+  ) => {
+    setEditingPackageId(item.id);
+    setPackageForm({
+      name: item.name,
+      durationDays:
+        String(item.durationDays),
+      price: String(item.price),
+      description: item.description,
+      isActive: item.isActive,
+    });
+  };
+
+  const submitPackage = async () => {
+    if (
+      !editingPackageId ||
+      !packageForm ||
+      working
+    ) {
+      return;
+    }
+
+    const durationDays =
+      Number(packageForm.durationDays);
+    const price =
+      Number(packageForm.price);
+
+    if (
+      packageForm.name
+        .trim().length < 3
+    ) {
+      window.alert(
+        "Package name must contain at least 3 characters."
+      );
+      return;
+    }
+
+    if (
+      !Number.isInteger(
+        durationDays
+      ) ||
+      durationDays < 1 ||
+      durationDays > 365
+    ) {
+      window.alert(
+        "Duration must be a whole number between 1 and 365 days."
+      );
+      return;
+    }
+
+    if (
+      !Number.isFinite(price) ||
+      price <= 0
+    ) {
+      window.alert(
+        "Enter a valid package price."
+      );
+      return;
+    }
+
+    try {
+      setWorking(true);
+      await saveSponsorshipPackage({
+        id: editingPackageId,
+        name: packageForm.name,
+        durationDays,
+        price,
+        description:
+          packageForm.description,
+        isActive:
+          packageForm.isActive,
+      });
+      const nextPackages =
+        await loadAdminSponsorshipPackages();
+      setPackages(nextPackages);
+      setEditingPackageId(null);
+      setPackageForm(null);
+      showNotice(
+        "Sponsorship package updated. New requests will use the new values."
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the sponsorship package."
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const submitCheckout = async () => {
+    if (working) {
+      return;
+    }
+
+    if (
+      checkoutForm.accountName
+        .trim().length < 2
+    ) {
+      window.alert(
+        "Enter a valid GCash account name."
+      );
+      return;
+    }
+
+    const digits =
+      checkoutForm.accountNumber.replace(
+        /\D/g,
         ""
       );
-    };
 
-  const filters: Array<{
-    key:
-      | "All"
-      | SponsorshipStatus;
-    label: string;
-    count: number;
-  }> = [
-    {
-      key: "All",
-      label: "All",
-      count: counts.all,
-    },
-    {
-      key: "Pending",
-      label: "Pending",
-      count: counts.pending,
-    },
-    {
-      key: "Active",
-      label: "Active",
-      count: counts.active,
-    },
-    {
-      key: "Rejected",
-      label: "Rejected",
-      count: counts.rejected,
-    },
-    {
-      key: "Expired",
-      label: "Expired",
-      count: counts.expired,
-    },
-  ];
+    if (
+      digits.length < 7 ||
+      digits.length > 15
+    ) {
+      window.alert(
+        "Enter a valid GCash account number."
+      );
+      return;
+    }
+
+    try {
+      setWorking(true);
+      await saveSponsorshipCheckout(
+        checkoutForm
+      );
+      const nextCheckout =
+        await loadAdminSponsorshipCheckout();
+      setCheckout(nextCheckout);
+      setCheckoutForm(
+        checkoutToForm(nextCheckout)
+      );
+      showNotice(
+        "GCash checkout settings saved successfully."
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the sponsorship checkout."
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.header}>
+    <div className="sa-page">
+      <div className="sa-heading">
         <div>
-          <div style={styles.eyebrow}>
-            ADMIN PORTAL
-          </div>
-
-          <h1 style={styles.title}>
-            Sponsored Listings
-          </h1>
-
-          <p
-            style={styles.subtitle}
-          >
-            Review cargo companies
-            that availed sponsored
-            placement and manage
-            activation status.
+          <p className="sa-eyebrow">
+            REVENUE MANAGEMENT
+          </p>
+          <h1>Sponsored Listings</h1>
+          <p>
+            Review payment proofs,
+            manage placements, and
+            configure sponsorship
+            packages.
           </p>
         </div>
 
-        <div
-          style={
-            styles.headerIcon
+        <button
+          type="button"
+          className="sa-refresh"
+          onClick={() =>
+            void loadPage()
+          }
+          disabled={
+            loading || working
           }
         >
-          <Megaphone
-            size={25}
-            color={COLORS.blue}
+          <RefreshCw
+            size={17}
+            className={
+              loading ? "sa-spin" : ""
+            }
           />
+          {loading
+            ? "Loading"
+            : "Refresh data"}
+        </button>
+      </div>
+
+      {notice && (
+        <div
+          className="sa-notice sa-notice--success"
+          role="status"
+        >
+          <CheckCircle2 size={19} />
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() =>
+              setNotice("")
+            }
+            aria-label="Dismiss message"
+          >
+            <X size={16} />
+          </button>
         </div>
-      </div>
+      )}
 
-      <div style={styles.statsGrid}>
-        <StatCard
-          icon={Clock3}
-          value={counts.pending}
-          label="Pending Requests"
-          tone="warning"
-        />
-
-        <StatCard
-          icon={Sparkles}
-          value={counts.active}
-          label="Active Sponsored"
-          tone="success"
-        />
-
-        <StatCard
-          icon={XCircle}
-          value={counts.rejected}
-          label="Rejected"
-          tone="danger"
-        />
-
-        <StatCard
-          icon={CalendarDays}
-          value={counts.expired}
-          label="Expired"
-          tone="muted"
-        />
-      </div>
+      {pageError && (
+        <div
+          className="sa-notice sa-notice--error"
+          role="alert"
+        >
+          <AlertCircle size={20} />
+          <div>
+            <strong>
+              Unable to load live
+              sponsorship data
+            </strong>
+            <span>{pageError}</span>
+            <small>
+              Run{" "}
+              <code>
+                supabase/admin-sponsorship-workflow.sql
+              </code>{" "}
+              in the same Supabase
+              project, then refresh.
+            </small>
+          </div>
+        </div>
+      )}
 
       <div
-        style={
-          styles.toolbarCard
-        }
+        className="sa-tabs"
+        role="tablist"
+        aria-label="Sponsorship management"
       >
-        <div
-          style={
-            styles.searchBox
+        <button
+          type="button"
+          className={
+            tab === "requests"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setTab("requests")
+          }
+          role="tab"
+          aria-selected={
+            tab === "requests"
           }
         >
-          <Search
-            size={18}
-            color={COLORS.muted}
-          />
-
-          <input
-            value={search}
-            onChange={(event) =>
-              setSearch(
-                event.target.value
-              )
-            }
-            placeholder="Search company, representative, email or request ID..."
-            style={styles.searchInput}
-          />
-        </div>
-
-        <div
-          style={
-            styles.filterLabel
+          <ReceiptText size={17} />
+          Requests
+          {counts.pending > 0 && (
+            <span>
+              {counts.pending}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={
+            tab === "settings"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setTab("settings")
+          }
+          role="tab"
+          aria-selected={
+            tab === "settings"
           }
         >
-          <Filter
-            size={17}
-            color={COLORS.blue}
-          />
-          Status
-        </div>
+          <Settings2 size={17} />
+          Packages & payment
+        </button>
+      </div>
 
-        <div
-          style={styles.filters}
-        >
-          {filters.map(
-            (item) => {
-              const selected =
-                filter ===
-                item.key;
+      {tab === "requests" ? (
+        <>
+          <section
+            className="sa-stats"
+            aria-label="Sponsorship summary"
+          >
+            <SummaryCard
+              label="Total requests"
+              value={counts.all}
+              helper="All submitted requests"
+              icon={
+                <Megaphone size={20} />
+              }
+              tone="blue"
+            />
+            <SummaryCard
+              label="Waiting for review"
+              value={counts.pending}
+              helper="Payment verification needed"
+              icon={
+                <Clock3 size={20} />
+              }
+              tone="gold"
+            />
+            <SummaryCard
+              label="Active sponsored"
+              value={counts.active}
+              helper="Currently promoted"
+              icon={
+                <Sparkles size={20} />
+              }
+              tone="green"
+            />
+            <SummaryCard
+              label="Ended or rejected"
+              value={
+                counts.expired +
+                counts.rejected +
+                counts.cancelled
+              }
+              helper="Inactive requests"
+              icon={<Ban size={20} />}
+              tone="gray"
+            />
+          </section>
 
-              return (
-                <button
-                  key={item.key}
-                  style={{
-                    ...styles.filterButton,
-                    ...(selected
-                      ? styles.filterButtonActive
-                      : {}),
-                  }}
-                  onClick={() =>
-                    setFilter(
-                      item.key
+          <section className="sa-panel">
+            <div className="sa-panel-header">
+              <div>
+                <h2>
+                  Sponsorship requests
+                </h2>
+                <p>
+                  Live records submitted
+                  from the CargoTrackPH
+                  business app.
+                </p>
+              </div>
+              <span className="sa-result-count">
+                {
+                  filteredRequests.length
+                }{" "}
+                result
+                {filteredRequests.length ===
+                1
+                  ? ""
+                  : "s"}
+              </span>
+            </div>
+
+            <div className="sa-toolbar">
+              <label className="sa-search">
+                <Search size={18} />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(
+                      event.target.value
                     )
                   }
-                >
-                  {item.label}
+                  placeholder="Search business, request, or reference..."
+                  aria-label="Search sponsorship requests"
+                />
+              </label>
 
-                  <span
-                    style={{
-                      ...styles.filterCount,
-                      ...(selected
-                        ? styles.filterCountActive
-                        : {}),
-                    }}
+              <div
+                className="sa-filters"
+                aria-label="Filter sponsorship requests"
+              >
+                {FILTERS.map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    className={
+                      filter === item
+                        ? "active"
+                        : ""
+                    }
+                    onClick={() =>
+                      setFilter(item)
+                    }
                   >
-                    {item.count}
-                  </span>
-                </button>
-              );
-            }
-          )}
-        </div>
-      </div>
-
-      <div
-        style={
-          styles.tableCard
-        }
-      >
-        <div
-          style={
-            styles.tableHeader
-          }
-        >
-          <div>
-            <div
-              style={
-                styles.tableTitle
-              }
-            >
-              Sponsorship Requests
+                    {item}
+                    <span>
+                      {
+                        filterCount(
+                          item
+                        )
+                      }
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div
-              style={
-                styles.tableSubtitle
-              }
-            >
-              Companies that
-              requested sponsored
-              placement
+            {loading ? (
+              <LoadingState label="Loading sponsorship requests..." />
+            ) : filteredRequests.length ===
+              0 ? (
+              <EmptyState
+                title={
+                  requests.length === 0
+                    ? "No sponsorship requests yet"
+                    : "No matching requests"
+                }
+                description={
+                  requests.length === 0
+                    ? "New requests from businesses will appear here automatically."
+                    : "Try another search term or status filter."
+                }
+              />
+            ) : (
+              <div className="sa-table-wrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Business</th>
+                      <th>Package</th>
+                      <th>Requested</th>
+                      <th>Price</th>
+                      <th>Status</th>
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRequests.map(
+                      (request) => (
+                        <tr key={request.id}>
+                          <td>
+                            <div className="sa-company-cell">
+                              <span>
+                                <Building2
+                                  size={
+                                    18
+                                  }
+                                />
+                              </span>
+                              <div>
+                                <strong>
+                                  {
+                                    request.businessName
+                                  }
+                                </strong>
+                                <small>
+                                  {
+                                    request.requestCode
+                                  }
+                                </small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <strong className="sa-table-primary">
+                              {
+                                request.packageName
+                              }
+                            </strong>
+                            <small className="sa-table-secondary">
+                              {
+                                request.durationDays
+                              }{" "}
+                              days
+                            </small>
+                          </td>
+                          <td>
+                            {formatDateTime(
+                              request.requestedAt
+                            )}
+                          </td>
+                          <td>
+                            <strong className="sa-price">
+                              {formatPeso(
+                                request.price
+                              )}
+                            </strong>
+                          </td>
+                          <td>
+                            <StatusBadge
+                              status={
+                                request.status
+                              }
+                            />
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="sa-view-button"
+                              onClick={() =>
+                                openRequest(
+                                  request.id
+                                )
+                              }
+                            >
+                              <Eye
+                                size={
+                                  16
+                                }
+                              />
+                              Review
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <section className="sa-settings-layout">
+          <div className="sa-panel sa-packages-panel">
+            <div className="sa-panel-header">
+              <div>
+                <h2>
+                  Sponsorship packages
+                </h2>
+                <p>
+                  Edit the offers shown
+                  to business owners in
+                  the mobile app.
+                </p>
+              </div>
+              <span className="sa-result-count">
+                {packages.length} packages
+              </span>
             </div>
-          </div>
 
-          <div
-            style={
-              styles.resultCount
-            }
-          >
-            {
-              filteredRequests.length
-            }{" "}
-            result
-            {filteredRequests.length ===
-            1
-              ? ""
-              : "s"}
-          </div>
-        </div>
-
-        <div
-          style={
-            styles.tableWrap
-          }
-        >
-          <table
-            style={styles.table}
-          >
-            <thead>
-              <tr>
-                <th
-                  style={
-                    styles.th
-                  }
+            <div className="sa-package-grid">
+              {packages.map((item) => (
+                <article
+                  className="sa-package-card"
+                  key={item.id}
                 >
-                  Company
-                </th>
-
-                <th
-                  style={
-                    styles.th
-                  }
-                >
-                  Package
-                </th>
-
-                <th
-                  style={
-                    styles.th
-                  }
-                >
-                  Requested
-                </th>
-
-                <th
-                  style={
-                    styles.th
-                  }
-                >
-                  Duration
-                </th>
-
-                <th
-                  style={
-                    styles.th
-                  }
-                >
-                  Price
-                </th>
-
-                <th
-                  style={
-                    styles.th
-                  }
-                >
-                  Status
-                </th>
-
-                <th
-                  style={
-                    styles.thAction
-                  }
-                >
-                  Action
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredRequests.map(
-                (request) => (
-                  <SponsoredRow
-                    key={
-                      request.id
-                    }
-                    request={
-                      request
-                    }
-                    onView={() =>
-                      setSelectedId(
-                        request.id
+                  <div className="sa-package-card-top">
+                    <span className="sa-package-icon">
+                      <PackageOpen
+                        size={20}
+                      />
+                    </span>
+                    <span
+                      className={`sa-availability ${item.isActive ? "active" : "inactive"}`}
+                    >
+                      {item.isActive
+                        ? "Visible in app"
+                        : "Hidden from app"}
+                    </span>
+                  </div>
+                  <h3>{item.name}</h3>
+                  <div className="sa-package-price">
+                    {formatPeso(
+                      item.price
+                    )}
+                  </div>
+                  <p>
+                    {item.description ||
+                      "No package description."}
+                  </p>
+                  <div className="sa-package-meta">
+                    <CalendarDays
+                      size={15}
+                    />
+                    {item.durationDays} days
+                    after approval
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      startPackageEdit(
+                        item
                       )
                     }
+                  >
+                    <Pencil size={15} />
+                    Edit package
+                  </button>
+                </article>
+              ))}
+            </div>
+
+            <div className="sa-info-note">
+              <BadgeCheck size={18} />
+              <span>
+                Package changes apply
+                only to new requests.
+                Existing requests keep
+                their submitted price
+                and duration snapshots.
+              </span>
+            </div>
+          </div>
+
+          <div className="sa-panel sa-checkout-panel">
+            <div className="sa-panel-header">
+              <div>
+                <h2>GCash checkout</h2>
+                <p>
+                  Payment details
+                  displayed during
+                  sponsorship submission.
+                </p>
+              </div>
+              <span
+                className={`sa-availability ${checkoutForm.isEnabled ? "active" : "inactive"}`}
+              >
+                {checkoutForm.isEnabled
+                  ? "Enabled"
+                  : "Disabled"}
+              </span>
+            </div>
+
+            <div className="sa-form-grid">
+              <label>
+                <span>
+                  Payment method
+                </span>
+                <div className="sa-readonly-field">
+                  <CreditCard size={16} />
+                  GCash
+                </div>
+              </label>
+              <label>
+                <span>Account name</span>
+                <input
+                  value={
+                    checkoutForm.accountName
+                  }
+                  onChange={(event) =>
+                    setCheckoutForm(
+                      (current) => ({
+                        ...current,
+                        accountName:
+                          event.target
+                            .value,
+                      })
+                    )
+                  }
+                  placeholder="Official account name"
+                  maxLength={100}
+                />
+              </label>
+              <label className="sa-form-wide">
+                <span>
+                  Account number
+                </span>
+                <div className="sa-secret-field">
+                  <input
+                    type={
+                      showAccountNumber
+                        ? "text"
+                        : "password"
+                    }
+                    value={
+                      checkoutForm.accountNumber
+                    }
+                    onChange={(event) =>
+                      setCheckoutForm(
+                        (current) => ({
+                          ...current,
+                          accountNumber:
+                            event.target
+                              .value,
+                        })
+                      )
+                    }
+                    placeholder="Official GCash number"
+                    inputMode="tel"
+                    maxLength={24}
                   />
-                )
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowAccountNumber(
+                        (current) =>
+                          !current
+                      )
+                    }
+                    aria-label={
+                      showAccountNumber
+                        ? "Hide account number"
+                        : "Show account number"
+                    }
+                  >
+                    {showAccountNumber ? (
+                      <EyeOff
+                        size={17}
+                      />
+                    ) : (
+                      <Eye size={17} />
+                    )}
+                  </button>
+                </div>
+              </label>
+              <label className="sa-form-wide">
+                <span>
+                  Payment instructions
+                </span>
+                <textarea
+                  value={
+                    checkoutForm.instructions
+                  }
+                  onChange={(event) =>
+                    setCheckoutForm(
+                      (current) => ({
+                        ...current,
+                        instructions:
+                          event.target
+                            .value,
+                      })
+                    )
+                  }
+                  placeholder="Instructions shown to business owners"
+                  maxLength={500}
+                  rows={4}
+                />
+                <small>
+                  {
+                    checkoutForm
+                      .instructions
+                      .length
+                  }
+                  /500 characters
+                </small>
+              </label>
+            </div>
+
+            <label className="sa-switch-row">
+              <input
+                type="checkbox"
+                checked={
+                  checkoutForm.isEnabled
+                }
+                onChange={(event) =>
+                  setCheckoutForm(
+                    (current) => ({
+                      ...current,
+                      isEnabled:
+                        event.target
+                          .checked,
+                    })
+                  )
+                }
+              />
+              <span
+                className="sa-switch"
+                aria-hidden="true"
+              />
+              <div>
+                <strong>
+                  Accept sponsorship
+                  submissions
+                </strong>
+                <small>
+                  When disabled,
+                  businesses cannot submit
+                  new payment proofs.
+                </small>
+              </div>
+            </label>
+
+            <button
+              type="button"
+              className="sa-primary-button sa-save-checkout"
+              onClick={() =>
+                void submitCheckout()
+              }
+              disabled={working}
+            >
+              {working ? (
+                <Loader2
+                  size={17}
+                  className="sa-spin"
+                />
+              ) : (
+                <Save size={17} />
               )}
-            </tbody>
-          </table>
-        </div>
+              Save checkout settings
+            </button>
 
-        {filteredRequests.length ===
-          0 && (
-          <div
-            style={
-              styles.emptyState
-            }
-          >
-            <Search
-              size={28}
-              color={
-                COLORS.muted
-              }
-            />
-
-            <div
-              style={
-                styles.emptyTitle
-              }
-            >
-              No sponsorship
-              requests found
-            </div>
-
-            <div
-              style={
-                styles.emptyText
-              }
-            >
-              Try another search
-              or status filter.
-            </div>
+            {checkout && (
+              <small className="sa-last-updated">
+                Last updated{" "}
+                {formatDateTime(
+                  checkout.updatedAt
+                )}
+              </small>
+            )}
           </div>
-        )}
-      </div>
-
-      <div
-        style={
-          styles.prototypeNotice
-        }
-      >
-        <AlertTriangle
-          size={20}
-          color={
-            COLORS.warning
-          }
-        />
-
-        <div>
-          <div
-            style={
-              styles.prototypeNoticeTitle
-            }
-          >
-            Prototype behavior
-          </div>
-
-          <div
-            style={
-              styles.prototypeNoticeText
-            }
-          >
-            Sponsorship records and
-            Approve / Reject actions
-            are stored in this admin
-            browser using
-            localStorage. The Expo
-            business app is not yet
-            connected to this page
-            until both projects share
-            a backend.
-          </div>
-        </div>
-      </div>
+        </section>
+      )}
 
       {selectedRequest && (
         <div
-          style={
-            styles.modalBackdrop
-          }
-          onMouseDown={(
-            event
-          ) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              setSelectedId(
-                null
-              );
-            }
-          }}
+          className="sa-modal-overlay"
+          role="presentation"
+          onMouseDown={closeRequest}
         >
-          <div
-            style={
-              styles.detailsModal
+          <section
+            className="sa-modal sa-review-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sponsorship-review-title"
+            onMouseDown={(event) =>
+              event.stopPropagation()
             }
           >
-            <div
-              style={
-                styles.modalHeader
-              }
-            >
-              <div>
-                <div
-                  style={
-                    styles.modalEyebrow
-                  }
-                >
-                  {
-                    selectedRequest.id
-                  }
-                </div>
-
-                <div
-                  style={
-                    styles.modalTitle
-                  }
-                >
-                  {
-                    selectedRequest.companyName
-                  }
+            <header className="sa-modal-header">
+              <div className="sa-modal-title-row">
+                <span className="sa-modal-icon">
+                  <Megaphone
+                    size={21}
+                  />
+                </span>
+                <div>
+                  <p>
+                    {
+                      selectedRequest.requestCode
+                    }
+                  </p>
+                  <h2 id="sponsorship-review-title">
+                    {
+                      selectedRequest.businessName
+                    }
+                  </h2>
                 </div>
               </div>
-
               <button
-                style={
-                  styles.iconButton
-                }
-                onClick={() =>
-                  setSelectedId(
-                    null
-                  )
-                }
-                aria-label="Close"
+                type="button"
+                className="sa-close"
+                onClick={closeRequest}
+                aria-label="Close review"
               >
                 <X size={20} />
               </button>
+            </header>
+
+            <div className="sa-modal-status-row">
+              <StatusBadge
+                status={
+                  selectedRequest.status
+                }
+              />
+              <span>
+                Requested{" "}
+                {formatDateTime(
+                  selectedRequest.requestedAt
+                )}
+              </span>
             </div>
 
-            <div
-              style={
-                styles.modalBody
-              }
-            >
-              <StatusHero
-                request={
-                  selectedRequest
-                }
-              />
-
-              <SectionTitle
-                title="Company Information"
-                subtitle="Cargo business that requested sponsored placement"
-              />
-
-              <div
-                style={
-                  styles.infoGrid
+            <div className="sa-detail-grid">
+              <DetailCard
+                title="Business account"
+                icon={
+                  <Building2 size={17} />
                 }
               >
-                <InfoCard
+                <DetailLine
                   icon={
-                    Building2
-                  }
-                  label="Company"
-                  value={
-                    selectedRequest.companyName
-                  }
-                />
-
-                <InfoCard
-                  icon={
-                    UserRound
+                    <UserRound
+                      size={15}
+                    />
                   }
                   label="Representative"
                   value={
                     selectedRequest.representativeName
                   }
                 />
-
-                <InfoCard
-                  icon={Mail}
+                <DetailLine
+                  icon={<Mail size={15} />}
                   label="Email"
                   value={
-                    selectedRequest.email
+                    selectedRequest.businessEmail
                   }
                 />
-
-                <InfoCard
-                  icon={Phone}
-                  label="Contact"
+                <DetailLine
+                  icon={
+                    <Phone size={15} />
+                  }
+                  label="Phone"
                   value={
-                    selectedRequest.phone
+                    selectedRequest.businessPhone
                   }
                 />
-              </div>
+              </DetailCard>
 
-              <SectionTitle
-                title="Sponsorship Details"
-                subtitle="Requested package and campaign period"
-              />
-
-              <div
-                style={
-                  styles.detailCard
+              <DetailCard
+                title="Requested package"
+                icon={
+                  <PackageOpen
+                    size={17}
+                  />
                 }
               >
-                <DetailRow
+                <DetailLine
                   label="Package"
                   value={
                     selectedRequest.packageName
                   }
                 />
-
-                <DetailRow
-                  label="Requested Duration"
-                  value={`${selectedRequest.requestedDurationDays} day(s)`}
+                <DetailLine
+                  label="Duration"
+                  value={`${selectedRequest.durationDays} days`}
                 />
-
-                <DetailRow
-                  label="Package Price"
+                <DetailLine
+                  label="Amount"
                   value={formatPeso(
-                    selectedRequest.packagePrice
+                    selectedRequest.price
                   )}
+                  emphasis
                 />
+              </DetailCard>
 
-                <DetailRow
-                  label="Requested At"
-                  value={formatDateTime(
-                    selectedRequest.requestedAt
-                  )}
-                />
-
-                <DetailRow
-                  label="Start Date"
-                  value={formatDate(
-                    selectedRequest.startDate
-                  )}
-                />
-
-                <DetailRow
-                  label="End Date"
-                  value={formatDate(
-                    selectedRequest.endDate
-                  )}
-                />
-              </div>
-
-              <SectionTitle
-                title="Payment Verification"
-                subtitle="Review the submitted GCash reference and sample payment proof"
-              />
-
-              <div
-                style={
-                  styles.paymentPanel
+              <DetailCard
+                title="Payment details"
+                icon={
+                  <CreditCard
+                    size={17}
+                  />
                 }
               >
-                <div
-                  style={
-                    styles.paymentPanelHeader
+                <DetailLine
+                  label="Method"
+                  value={
+                    selectedRequest.paymentMethod
                   }
+                />
+                <DetailLine
+                  label="Reference"
+                  value={
+                    selectedRequest.paymentReference
+                  }
+                  mono
+                />
+                <button
+                  type="button"
+                  className="sa-proof-button"
+                  onClick={() =>
+                    void openReceipt(
+                      selectedRequest
+                    )
+                  }
+                  disabled={working}
                 >
-                  <div
-                    style={
-                      styles.paymentIcon
+                  <FileImage
+                    size={17}
+                  />
+                  <span>
+                    <strong>
+                      Open payment receipt
+                    </strong>
+                    <small>
+                      {receiptName(
+                        selectedRequest.paymentProofPath
+                      )}
+                    </small>
+                  </span>
+                  <Eye size={16} />
+                </button>
+              </DetailCard>
+
+              <DetailCard
+                title="Placement timeline"
+                icon={
+                  <CalendarDays
+                    size={17}
+                  />
+                }
+              >
+                <DetailLine
+                  label="Reviewed"
+                  value={formatDateTime(
+                    selectedRequest.reviewedAt
+                  )}
+                />
+                <DetailLine
+                  label="Starts"
+                  value={formatDateTime(
+                    selectedRequest.startsAt
+                  )}
+                />
+                <DetailLine
+                  label="Ends"
+                  value={formatDateTime(
+                    selectedRequest.endsAt
+                  )}
+                />
+              </DetailCard>
+            </div>
+
+            {selectedRequest.rejectionReason && (
+              <div className="sa-rejection-note">
+                <XCircle size={18} />
+                <div>
+                  <strong>
+                    Rejection reason
+                  </strong>
+                  <span>
+                    {
+                      selectedRequest.rejectionReason
                     }
-                  >
-                    <CreditCard
-                      size={21}
-                      color={COLORS.blue}
-                    />
-                  </div>
-
-                  <div
-                    style={{ flex: 1 }}
-                  >
-                    <div
-                      style={
-                        styles.paymentTitle
-                      }
-                    >
-                      {
-                        selectedRequest.paymentMethod
-                      } Payment
-                    </div>
-
-                    <div
-                      style={
-                        styles.paymentSubtitle
-                      }
-                    >
-                      Manually verify before activating
-                      the sponsored listing.
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      ...styles.verificationBadge,
-                      ...(selectedRequest.paymentVerified
-                        ? styles.verificationBadgeSuccess
-                        : styles.verificationBadgePending),
-                    }}
-                  >
-                    {selectedRequest.paymentVerified
-                      ? "VERIFIED"
-                      : "FOR VERIFICATION"}
-                  </div>
+                  </span>
                 </div>
+              </div>
+            )}
 
-                <div
-                  style={
-                    styles.paymentDetailsGrid
+            {selectedRequest.status ===
+              "Pending" && (
+              <label className="sa-review-check">
+                <input
+                  type="checkbox"
+                  checked={
+                    paymentReviewed
                   }
-                >
-                  <PaymentInfo
-                    label="Amount Paid"
-                    value={formatPeso(
-                      selectedRequest.packagePrice
-                    )}
+                  onChange={(event) =>
+                    setPaymentReviewed(
+                      event.target
+                        .checked
+                    )
+                  }
+                />
+                <span>
+                  <BadgeCheck
+                    size={18}
                   />
-
-                  <PaymentInfo
-                    label="Payment Method"
-                    value={
-                      selectedRequest.paymentMethod
-                    }
-                  />
-
-                  <PaymentInfo
-                    label="GCash Reference"
-                    value={
-                      selectedRequest.paymentReference
-                    }
-                  />
-
-                  <PaymentInfo
-                    label="Verification Date"
-                    value={formatDateTime(
-                      selectedRequest.paymentVerifiedAt
-                    )}
-                  />
+                </span>
+                <div>
+                  <strong>
+                    I reviewed the receipt
+                    and transaction
+                    reference
+                  </strong>
+                  <small>
+                    Approval activates the
+                    sponsored placement
+                    immediately.
+                  </small>
                 </div>
+              </label>
+            )}
 
-                <div
-                  style={
-                    styles.proofCard
-                  }
-                >
-                  <div
-                    style={
-                      styles.proofFileIcon
-                    }
-                  >
-                    <ImageIcon
-                      size={22}
-                      color={COLORS.blue}
-                    />
+            {selectedRequest.placementId &&
+              selectedRequest.status !==
+                "Expired" && (
+                <div className="sa-placement-control">
+                  <div>
+                    <strong>
+                      Sponsored placement
+                    </strong>
+                    <span>
+                      {selectedRequest.placementIsEnabled
+                        ? "Enabled and eligible for customer visibility"
+                        : "Disabled and hidden from sponsored results"}
+                    </span>
                   </div>
-
-                  <div
-                    style={{ flex: 1 }}
-                  >
-                    <div
-                      style={
-                        styles.proofFileName
-                      }
-                    >
-                      {
-                        selectedRequest.paymentProofName
-                      }
-                    </div>
-
-                    <div
-                      style={
-                        styles.proofFileText
-                      }
-                    >
-                      Submitted payment proof
-                    </div>
-                  </div>
-
                   <button
-                    style={
-                      styles.viewProofButton
+                    type="button"
+                    className={
+                      selectedRequest.placementIsEnabled
+                        ? "enabled"
+                        : "disabled"
                     }
                     onClick={() =>
-                      setProofVisible(true)
+                      void togglePlacement(
+                        selectedRequest
+                      )
                     }
+                    disabled={working}
                   >
-                    <Eye size={16} />
-                    View Proof
+                    {selectedRequest.placementIsEnabled
+                      ? "Disable"
+                      : "Enable"}
                   </button>
                 </div>
+              )}
 
-                {selectedRequest.paymentVerified ? (
-                  <div
-                    style={
-                      styles.verifiedNotice
-                    }
-                  >
-                    <ShieldCheck
-                      size={19}
-                      color={COLORS.success}
-                    />
-
-                    <div>
-                      <div
-                        style={
-                          styles.verifiedNoticeTitle
-                        }
-                      >
-                        Payment verified
-                      </div>
-
-                      <div
-                        style={
-                          styles.verifiedNoticeText
-                        }
-                      >
-                        This request can now be
-                        approved and activated.
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    style={
-                      styles.verifyPaymentButton
-                    }
-                    onClick={
-                      verifySelectedPayment
-                    }
-                  >
-                    <ShieldCheck size={18} />
-                    Mark Payment as Verified
-                  </button>
-                )}
-              </div>
-
+            <footer className="sa-modal-actions">
+              <button
+                type="button"
+                className="sa-secondary-button"
+                onClick={closeRequest}
+              >
+                Close
+              </button>
               {selectedRequest.status ===
-                "Rejected" &&
-                selectedRequest.rejectionReason && (
-                  <div
-                    style={
-                      styles.rejectionCard
+                "Pending" && (
+                <>
+                  <button
+                    type="button"
+                    className="sa-danger-button"
+                    onClick={() =>
+                      setRejectVisible(
+                        true
+                      )
                     }
+                    disabled={working}
                   >
                     <XCircle
-                      size={20}
-                      color={
-                        COLORS.danger
-                      }
+                      size={17}
                     />
-
-                    <div>
-                      <div
-                        style={
-                          styles.rejectionTitle
-                        }
-                      >
-                        Rejection Reason
-                      </div>
-
-                      <div
-                        style={
-                          styles.rejectionText
-                        }
-                      >
-                        {
-                          selectedRequest.rejectionReason
-                        }
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {selectedRequest.status ===
-                "Active" && (
-                <div
-                  style={
-                    styles.activeNotice
-                  }
-                >
-                  <ShieldCheck
-                    size={21}
-                    color={
-                      COLORS.success
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-primary-button"
+                    onClick={() =>
+                      void approveSelected()
                     }
-                  />
-
-                  <div>
-                    <div
-                      style={
-                        styles.activeNoticeTitle
-                      }
-                    >
-                      Sponsored placement
-                      active
-                    </div>
-
-                    <div
-                      style={
-                        styles.activeNoticeText
-                      }
-                    >
-                      This company is
-                      approved for
-                      sponsored placement
-                      until{" "}
-                      {formatDate(
-                        selectedRequest.endDate
-                      )}
-                      .
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div
-              style={
-                styles.modalFooter
-              }
-            >
-              {selectedRequest.status !==
-                "Active" && (
-                <button
-                  style={
-                    styles.rejectButton
-                  }
-                  onClick={
-                    openReject
-                  }
-                >
-                  <XCircle
-                    size={18}
-                  />
-                  Reject
-                </button>
-              )}
-
-              {selectedRequest.status !==
-                "Active" && (
-                <button
-                  style={{
-                    ...styles.approveButton,
-                    ...(!selectedRequest.paymentVerified
-                      ? styles.disabledButton
-                      : {}),
-                  }}
-                  disabled={
-                    !selectedRequest.paymentVerified
-                  }
-                  onClick={
-                    approveSelected
-                  }
-                >
-                  <Sparkles
-                    size={18}
-                  />
-                  Approve & Activate
-                </button>
-              )}
-
-              {selectedRequest.status ===
-                "Active" && (
-                <div
-                  style={
-                    styles.activeFooterText
-                  }
-                >
-                  <CheckCircle2
-                    size={18}
-                    color={
-                      COLORS.success
+                    disabled={
+                      !paymentReviewed ||
+                      working
                     }
-                  />
-                  Sponsored listing is
-                  currently active.
-                </div>
+                  >
+                    {working ? (
+                      <Loader2
+                        size={17}
+                        className="sa-spin"
+                      />
+                    ) : (
+                      <CheckCircle2
+                        size={17}
+                      />
+                    )}
+                    Approve & activate
+                  </button>
+                </>
               )}
-            </div>
-          </div>
+            </footer>
+          </section>
         </div>
       )}
 
       {rejectVisible &&
         selectedRequest && (
           <div
-            style={
-              styles.modalBackdrop
-            }
+            className="sa-modal-overlay sa-modal-overlay--top"
+            role="presentation"
           >
-            <div
-              style={
-                styles.rejectModal
-              }
+            <section
+              className="sa-modal sa-small-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="reject-title"
             >
-              <div
-                style={
-                  styles.modalHeader
-                }
-              >
-                <div>
-                  <div
-                    style={
-                      styles.modalEyebrow
-                    }
-                  >
-                    REJECT SPONSORSHIP
-                  </div>
-
-                  <div
-                    style={
-                      styles.rejectModalTitle
-                    }
-                  >
-                    {
-                      selectedRequest.companyName
-                    }
+              <header className="sa-modal-header">
+                <div className="sa-modal-title-row">
+                  <span className="sa-modal-icon sa-modal-icon--danger">
+                    <XCircle
+                      size={21}
+                    />
+                  </span>
+                  <div>
+                    <p>
+                      {
+                        selectedRequest.requestCode
+                      }
+                    </p>
+                    <h2 id="reject-title">
+                      Reject sponsorship
+                      request
+                    </h2>
                   </div>
                 </div>
-
                 <button
-                  style={
-                    styles.iconButton
-                  }
+                  type="button"
+                  className="sa-close"
                   onClick={() =>
                     setRejectVisible(
                       false
                     )
                   }
+                  aria-label="Close rejection form"
                 >
                   <X size={20} />
                 </button>
-              </div>
-
-              <div
-                style={
-                  styles.rejectBody
-                }
-              >
-                <label
-                  style={
-                    styles.textareaLabel
-                  }
-                >
-                  Rejection reason
+              </header>
+              <div className="sa-small-modal-body">
+                <p>
+                  Give the business a
+                  clear reason so they
+                  know what to correct.
+                </p>
+                <label>
+                  <span>
+                    Rejection reason
+                  </span>
+                  <textarea
+                    value={
+                      rejectionReason
+                    }
+                    onChange={(event) =>
+                      setRejectionReason(
+                        event.target
+                          .value
+                      )
+                    }
+                    placeholder="Example: The uploaded receipt is unclear or the reference does not match."
+                    rows={5}
+                    maxLength={500}
+                    autoFocus
+                  />
+                  <small>
+                    {
+                      rejectionReason.length
+                    }
+                    /500 characters
+                  </small>
                 </label>
-
-                <textarea
-                  value={
-                    rejectionReason
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setRejectionReason(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Explain why this sponsorship request cannot be activated yet..."
-                  style={
-                    styles.textarea
-                  }
-                />
-
-                <div
-                  style={
-                    styles.rejectHint
-                  }
-                >
-                  Enter a clear reason
-                  that the cargo
-                  business can
-                  understand.
-                </div>
               </div>
-
-              <div
-                style={
-                  styles.rejectFooter
-                }
-              >
+              <footer className="sa-modal-actions">
                 <button
-                  style={
-                    styles.cancelButton
-                  }
+                  type="button"
+                  className="sa-secondary-button"
                   onClick={() =>
                     setRejectVisible(
                       false
@@ -1727,1717 +1798,395 @@ export default function Sponsored() {
                 >
                   Cancel
                 </button>
-
                 <button
-                  style={
-                    styles.confirmRejectButton
+                  type="button"
+                  className="sa-danger-button sa-danger-button--solid"
+                  onClick={() =>
+                    void confirmReject()
                   }
-                  onClick={
-                    confirmReject
-                  }
+                  disabled={working}
                 >
-                  Reject Request
+                  {working ? (
+                    <Loader2
+                      size={17}
+                      className="sa-spin"
+                    />
+                  ) : (
+                    <XCircle
+                      size={17}
+                    />
+                  )}
+                  Confirm rejection
                 </button>
-              </div>
-            </div>
+              </footer>
+            </section>
           </div>
         )}
 
-      {proofVisible &&
-        selectedRequest && (
+      {editingPackageId &&
+        packageForm && (
           <div
-            style={{
-              ...styles.modalBackdrop,
-              zIndex: 1100,
-            }}
-            onMouseDown={(event) => {
-              if (
-                event.target ===
-                event.currentTarget
-              ) {
-                setProofVisible(false);
-              }
-            }}
+            className="sa-modal-overlay sa-modal-overlay--top"
+            role="presentation"
+            onMouseDown={() =>
+              setEditingPackageId(
+                null
+              )
+            }
           >
-            <div
-              style={
-                styles.proofModal
+            <section
+              className="sa-modal sa-small-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="package-edit-title"
+              onMouseDown={(event) =>
+                event.stopPropagation()
               }
             >
-              <div
-                style={
-                  styles.modalHeader
-                }
-              >
-                <div>
-                  <div
-                    style={
-                      styles.modalEyebrow
-                    }
-                  >
-                    PAYMENT PROOF
-                  </div>
-
-                  <div
-                    style={
-                      styles.rejectModalTitle
-                    }
-                  >
-                    {
-                      selectedRequest.paymentProofName
-                    }
+              <header className="sa-modal-header">
+                <div className="sa-modal-title-row">
+                  <span className="sa-modal-icon">
+                    <Pencil
+                      size={20}
+                    />
+                  </span>
+                  <div>
+                    <p>
+                      PACKAGE SETTINGS
+                    </p>
+                    <h2 id="package-edit-title">
+                      Edit sponsorship
+                      package
+                    </h2>
                   </div>
                 </div>
-
                 <button
-                  style={
-                    styles.iconButton
-                  }
+                  type="button"
+                  className="sa-close"
                   onClick={() =>
-                    setProofVisible(false)
+                    setEditingPackageId(
+                      null
+                    )
                   }
-                  aria-label="Close payment proof"
+                  aria-label="Close package editor"
                 >
                   <X size={20} />
                 </button>
+              </header>
+              <div className="sa-small-modal-body sa-form-grid">
+                <label className="sa-form-wide">
+                  <span>
+                    Package name
+                  </span>
+                  <input
+                    value={
+                      packageForm.name
+                    }
+                    onChange={(event) =>
+                      setPackageForm(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                name:
+                                  event
+                                    .target
+                                    .value,
+                              }
+                            : current
+                      )
+                    }
+                    maxLength={80}
+                  />
+                </label>
+                <label>
+                  <span>
+                    Duration (days)
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    step="1"
+                    value={
+                      packageForm.durationDays
+                    }
+                    onChange={(event) =>
+                      setPackageForm(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                durationDays:
+                                  event
+                                    .target
+                                    .value,
+                              }
+                            : current
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  <span>
+                    Price (PHP)
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000000"
+                    step="0.01"
+                    value={
+                      packageForm.price
+                    }
+                    onChange={(event) =>
+                      setPackageForm(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                price:
+                                  event
+                                    .target
+                                    .value,
+                              }
+                            : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="sa-form-wide">
+                  <span>
+                    Description
+                  </span>
+                  <textarea
+                    value={
+                      packageForm.description
+                    }
+                    onChange={(event) =>
+                      setPackageForm(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                description:
+                                  event
+                                    .target
+                                    .value,
+                              }
+                            : current
+                      )
+                    }
+                    rows={4}
+                    maxLength={500}
+                  />
+                </label>
+                <label className="sa-switch-row sa-form-wide">
+                  <input
+                    type="checkbox"
+                    checked={
+                      packageForm.isActive
+                    }
+                    onChange={(event) =>
+                      setPackageForm(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                isActive:
+                                  event
+                                    .target
+                                    .checked,
+                              }
+                            : current
+                      )
+                    }
+                  />
+                  <span
+                    className="sa-switch"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <strong>
+                      Visible in the
+                      business app
+                    </strong>
+                    <small>
+                      Inactive packages
+                      remain in history
+                      but cannot be
+                      selected.
+                    </small>
+                  </div>
+                </label>
               </div>
-
-              <div
-                style={
-                  styles.proofModalBody
-                }
-              >
-                <div
-                  style={
-                    styles.sampleReceipt
+              <footer className="sa-modal-actions">
+                <button
+                  type="button"
+                  className="sa-secondary-button"
+                  onClick={() =>
+                    setEditingPackageId(
+                      null
+                    )
                   }
                 >
-                  <div
-                    style={
-                      styles.receiptBrand
-                    }
-                  >
-                    <div
-                      style={
-                        styles.receiptBrandIcon
-                      }
-                    >
-                      <Receipt size={24} />
-                    </div>
-
-                    <div>
-                      <div
-                        style={
-                          styles.receiptBrandName
-                        }
-                      >
-                        GCash
-                      </div>
-
-                      <div
-                        style={
-                          styles.receiptBrandSubtext
-                        }
-                      >
-                        Sample transaction receipt
-                      </div>
-                    </div>
-                  </div>
-
-                  <CheckCircle2
-                    size={44}
-                    color={COLORS.success}
-                  />
-
-                  <div
-                    style={
-                      styles.receiptSuccess
-                    }
-                  >
-                    Payment Successful
-                  </div>
-
-                  <div
-                    style={
-                      styles.receiptAmount
-                    }
-                  >
-                    {formatPeso(
-                      selectedRequest.packagePrice
-                    )}
-                  </div>
-
-                  <div
-                    style={
-                      styles.receiptDetails
-                    }
-                  >
-                    <DetailRow
-                      label="Paid By"
-                      value={
-                        selectedRequest.companyName
-                      }
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="sa-primary-button"
+                  onClick={() =>
+                    void submitPackage()
+                  }
+                  disabled={working}
+                >
+                  {working ? (
+                    <Loader2
+                      size={17}
+                      className="sa-spin"
                     />
-
-                    <DetailRow
-                      label="Sent To"
-                      value="Cargo Track PH Admin"
-                    />
-
-                    <DetailRow
-                      label="Reference No."
-                      value={
-                        selectedRequest.paymentReference
-                      }
-                    />
-
-                    <DetailRow
-                      label="Submitted"
-                      value={formatDateTime(
-                        selectedRequest.requestedAt
-                      )}
-                    />
-                  </div>
-
-                  <div
-                    style={
-                      styles.receiptPrototypeNote
-                    }
-                  >
-                    Prototype preview only — no real
-                    transaction was processed.
-                  </div>
-                </div>
-              </div>
-            </div>
+                  ) : (
+                    <Save size={17} />
+                  )}
+                  Save package
+                </button>
+              </footer>
+            </section>
           </div>
         )}
     </div>
   );
 }
 
-function SponsoredRow({
-  request,
-  onView,
-}: {
-  request: SponsorshipRequest;
-  onView: () => void;
-}) {
-  const config =
-    statusConfig(
-      request.status
-    );
-
-  const Icon =
-    config.icon;
-
-  return (
-    <tr>
-      <td style={styles.td}>
-        <div
-          style={
-            styles.companyCell
-          }
-        >
-          <div
-            style={
-              styles.companyAvatar
-            }
-          >
-            <Building2
-              size={18}
-              color={COLORS.blue}
-            />
-          </div>
-
-          <div>
-            <div
-              style={
-                styles.companyName
-              }
-            >
-              {
-                request.companyName
-              }
-            </div>
-
-            <div
-              style={
-                styles.companyMeta
-              }
-            >
-              {request.id}
-            </div>
-          </div>
-        </div>
-      </td>
-
-      <td style={styles.td}>
-        <div
-          style={
-            styles.packageBadge
-          }
-        >
-          <Sparkles
-            size={14}
-          />
-          {
-            request.packageName
-          }
-        </div>
-      </td>
-
-      <td style={styles.td}>
-        <div
-          style={styles.dateText}
-        >
-          {formatDateTime(
-            request.requestedAt
-          )}
-        </div>
-      </td>
-
-      <td style={styles.td}>
-        <div
-          style={
-            styles.durationText
-          }
-        >
-          {
-            request.requestedDurationDays
-          }{" "}
-          days
-        </div>
-      </td>
-
-      <td style={styles.td}>
-        <div
-          style={
-            styles.priceText
-          }
-        >
-          {formatPeso(
-            request.packagePrice
-          )}
-        </div>
-      </td>
-
-      <td style={styles.td}>
-        <div
-          style={{
-            ...styles.statusBadge,
-            background:
-              config.background,
-            color:
-              config.color,
-          }}
-        >
-          <Icon size={14} />
-          {request.status}
-        </div>
-      </td>
-
-      <td
-        style={
-          styles.tdAction
-        }
-      >
-        <button
-          style={
-            styles.viewButton
-          }
-          onClick={onView}
-        >
-          <Eye size={16} />
-          View
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  value,
+function SummaryCard({
   label,
+  value,
+  helper,
+  icon,
   tone,
 }: {
-  icon: typeof Clock3;
-  value: number;
   label: string;
-  tone:
-    | "warning"
-    | "success"
-    | "danger"
-    | "muted";
+  value: number;
+  helper: string;
+  icon: ReactNode;
+  tone: "blue" | "gold" | "green" | "gray";
 }) {
-  const toneMap = {
-    warning: {
-      background:
-        "#FFF7ED",
-      color:
-        COLORS.warning,
-    },
-    success: {
-      background:
-        "#F0FDF4",
-      color:
-        COLORS.success,
-    },
-    danger: {
-      background:
-        "#FFF1F2",
-      color:
-        COLORS.danger,
-    },
-    muted: {
-      background:
-        "#F1F5F9",
-      color:
-        COLORS.muted,
-    },
-  };
-
-  const selected =
-    toneMap[tone];
-
   return (
-    <div
-      style={
-        styles.statCard
-      }
-    >
+    <article className="sa-summary-card">
       <div
-        style={{
-          ...styles.statIcon,
-          background:
-            selected.background,
-        }}
+        className={`sa-summary-icon sa-summary-icon--${tone}`}
       >
-        <Icon
-          size={21}
-          color={
-            selected.color
-          }
-        />
+        {icon}
       </div>
-
       <div>
-        <div
-          style={
-            styles.statValue
-          }
-        >
-          {value}
-        </div>
-
-        <div
-          style={
-            styles.statLabel
-          }
-        >
-          {label}
-        </div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{helper}</small>
       </div>
-    </div>
+    </article>
   );
 }
 
-function StatusHero({
-  request,
+function StatusBadge({
+  status,
 }: {
-  request: SponsorshipRequest;
+  status: SponsorshipDisplayStatus;
 }) {
-  const config =
-    statusConfig(
-      request.status
-    );
-
-  const Icon =
-    config.icon;
-
-  const message =
-    request.status ===
-    "Pending"
-      ? "Waiting for admin review before sponsored placement becomes active."
-      : request.status ===
-        "Active"
-      ? `Sponsored placement is active until ${formatDate(
-          request.endDate
-        )}.`
-      : request.status ===
-        "Rejected"
-      ? "This sponsorship request was rejected and is not active."
-      : "The sponsored placement period has ended.";
+  const tone =
+    statusTone(status);
 
   return (
-    <div
-      style={{
-        ...styles.statusHero,
-        background:
-          config.background,
-      }}
+    <span
+      className={`sa-status sa-status--${tone}`}
     >
-      <div
-        style={{
-          ...styles.statusHeroIcon,
-          color:
-            config.color,
-        }}
-      >
-        <Icon size={25} />
-      </div>
+      {status === "Active" ? (
+        <CheckCircle2 size={13} />
+      ) : (
+        <Clock3 size={13} />
+      )}
+      {status}
+    </span>
+  );
+}
 
-      <div>
-        <div
-          style={{
-            ...styles.statusHeroTitle,
-            color:
-              config.color,
-          }}
-        >
-          {request.status}
-        </div>
-
-        <div
-          style={
-            styles.statusHeroText
-          }
-        >
-          {message}
-        </div>
-      </div>
+function LoadingState({
+  label,
+}: {
+  label: string;
+}) {
+  return (
+    <div className="sa-empty-state">
+      <Loader2
+        size={27}
+        className="sa-spin"
+      />
+      <strong>{label}</strong>
     </div>
   );
 }
 
-function SectionTitle({
+function EmptyState({
   title,
-  subtitle,
+  description,
 }: {
   title: string;
-  subtitle: string;
+  description: string;
 }) {
   return (
-    <div
-      style={
-        styles.sectionTitleWrap
-      }
-    >
-      <div
-        style={
-          styles.sectionTitle
-        }
-      >
+    <div className="sa-empty-state">
+      <span>
+        <Megaphone size={25} />
+      </span>
+      <strong>{title}</strong>
+      <p>{description}</p>
+    </div>
+  );
+}
+
+function DetailCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="sa-detail-card">
+      <h3>
+        {icon}
         {title}
-      </div>
-
-      <div
-        style={
-          styles.sectionSubtitle
-        }
-      >
-        {subtitle}
-      </div>
-    </div>
+      </h3>
+      <div>{children}</div>
+    </section>
   );
 }
 
-function InfoCard({
-  icon: Icon,
+function DetailLine({
+  icon,
   label,
   value,
+  emphasis = false,
+  mono = false,
 }: {
-  icon: typeof Building2;
+  icon?: ReactNode;
   label: string;
   value: string;
+  emphasis?: boolean;
+  mono?: boolean;
 }) {
   return (
-    <div
-      style={
-        styles.infoCard
-      }
-    >
-      <div
-        style={
-          styles.infoIcon
-        }
-      >
-        <Icon
-          size={18}
-          color={COLORS.blue}
-        />
-      </div>
-
-      <div>
-        <div
-          style={
-            styles.infoLabel
-          }
-        >
-          {label}
-        </div>
-
-        <div
-          style={
-            styles.infoValue
-          }
-        >
-          {value}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div
-      style={
-        styles.detailRow
-      }
-    >
-      <div
-        style={
-          styles.detailLabel
-        }
-      >
+    <div className="sa-detail-line">
+      <span>
+        {icon}
         {label}
-      </div>
-
-      <div
-        style={
-          styles.detailValue
-        }
+      </span>
+      <strong
+        className={`${emphasis ? "emphasis" : ""} ${mono ? "mono" : ""}`.trim()}
       >
         {value}
-      </div>
+      </strong>
     </div>
   );
 }
-
-function PaymentInfo({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div
-      style={
-        styles.paymentInfo
-      }
-    >
-      <div
-        style={
-          styles.paymentInfoLabel
-        }
-      >
-        {label}
-      </div>
-
-      <div
-        style={
-          styles.paymentInfoValue
-        }
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-const styles:
-  Record<
-    string,
-    CSSProperties
-  > = {
-  page: {
-    minHeight: "100vh",
-    background:
-      COLORS.background,
-    padding: "30px",
-    color: COLORS.text,
-    fontFamily:
-      "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-
-  header: {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent:
-      "space-between",
-    gap: "20px",
-    marginBottom: "24px",
-  },
-
-  eyebrow: {
-    color: COLORS.blue,
-    fontSize: "12px",
-    fontWeight: 800,
-    letterSpacing: "1.2px",
-  },
-
-  title: {
-    margin: "6px 0 0",
-    color: COLORS.navy,
-    fontSize: "30px",
-    lineHeight: 1.15,
-  },
-
-  subtitle: {
-    margin: "8px 0 0",
-    maxWidth: "650px",
-    color: COLORS.muted,
-    fontSize: "14px",
-    lineHeight: 1.6,
-  },
-
-  headerIcon: {
-    width: "54px",
-    height: "54px",
-    borderRadius: "16px",
-    background:
-      COLORS.lightBlue,
-    display: "flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    flexShrink: 0,
-  },
-
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(4, minmax(0, 1fr))",
-    gap: "14px",
-    marginBottom: "18px",
-  },
-
-  statCard: {
-    background:
-      COLORS.white,
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "18px",
-    padding: "17px",
-    display: "flex",
-    alignItems: "center",
-    gap: "13px",
-    boxShadow:
-      "0 8px 24px rgba(15, 23, 42, 0.04)",
-  },
-
-  statIcon: {
-    width: "46px",
-    height: "46px",
-    borderRadius: "14px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    flexShrink: 0,
-  },
-
-  statValue: {
-    color: COLORS.navy,
-    fontSize: "22px",
-    fontWeight: 900,
-  },
-
-  statLabel: {
-    color: COLORS.muted,
-    fontSize: "12px",
-    marginTop: "2px",
-  },
-
-  toolbarCard: {
-    background:
-      COLORS.white,
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "18px",
-    padding: "14px",
-    marginBottom: "18px",
-  },
-
-  searchBox: {
-    minHeight: "48px",
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "13px",
-    background: "#FBFCFD",
-    display: "flex",
-    alignItems: "center",
-    gap: "9px",
-    padding: "0 13px",
-  },
-
-  searchInput: {
-    flex: 1,
-    width: "100%",
-    border: "none",
-    outline: "none",
-    background:
-      "transparent",
-    color: COLORS.text,
-    fontSize: "13px",
-  },
-
-  filterLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    color: COLORS.navy,
-    fontSize: "12px",
-    fontWeight: 800,
-    marginTop: "13px",
-    marginBottom: "8px",
-  },
-
-  filters: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-
-  filterButton: {
-    minHeight: "38px",
-    borderRadius: "11px",
-    border:
-      `1px solid ${COLORS.border}`,
-    background:
-      COLORS.white,
-    color: COLORS.navy,
-    padding: "0 11px",
-    display: "flex",
-    alignItems: "center",
-    gap: "7px",
-    cursor: "pointer",
-    fontWeight: 800,
-    fontSize: "12px",
-  },
-
-  filterButtonActive: {
-    background: COLORS.blue,
-    borderColor: COLORS.blue,
-    color: COLORS.white,
-  },
-
-  filterCount: {
-    minWidth: "22px",
-    height: "22px",
-    padding: "0 6px",
-    borderRadius: "999px",
-    background:
-      COLORS.lightBlue,
-    color: COLORS.blue,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    fontSize: "10px",
-    fontWeight: 900,
-  },
-
-  filterCountActive: {
-    background:
-      "rgba(255,255,255,0.18)",
-    color: COLORS.white,
-  },
-
-  tableCard: {
-    background:
-      COLORS.white,
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "20px",
-    overflow: "hidden",
-    boxShadow:
-      "0 10px 30px rgba(15, 23, 42, 0.04)",
-  },
-
-  tableHeader: {
-    padding: "18px 20px",
-    display: "flex",
-    justifyContent:
-      "space-between",
-    alignItems: "center",
-    gap: "15px",
-    borderBottom:
-      `1px solid ${COLORS.border}`,
-  },
-
-  tableTitle: {
-    color: COLORS.navy,
-    fontSize: "16px",
-    fontWeight: 900,
-  },
-
-  tableSubtitle: {
-    color: COLORS.muted,
-    fontSize: "12px",
-    marginTop: "3px",
-  },
-
-  resultCount: {
-    background:
-      COLORS.lightBlue,
-    color: COLORS.blue,
-    borderRadius: "999px",
-    padding: "7px 10px",
-    fontSize: "11px",
-    fontWeight: 900,
-    whiteSpace: "nowrap",
-  },
-
-  tableWrap: {
-    overflowX: "auto",
-  },
-
-  table: {
-    width: "100%",
-    borderCollapse:
-      "collapse",
-    minWidth: "860px",
-  },
-
-  th: {
-    textAlign: "left",
-    padding: "12px 18px",
-    background: "#F8FAFC",
-    color: COLORS.muted,
-    fontSize: "10px",
-    letterSpacing: "0.5px",
-    fontWeight: 900,
-    borderBottom:
-      `1px solid ${COLORS.border}`,
-  },
-
-  thAction: {
-    textAlign: "right",
-    padding: "12px 18px",
-    background: "#F8FAFC",
-    color: COLORS.muted,
-    fontSize: "10px",
-    letterSpacing: "0.5px",
-    fontWeight: 900,
-    borderBottom:
-      `1px solid ${COLORS.border}`,
-  },
-
-  td: {
-    padding: "14px 18px",
-    borderBottom:
-      `1px solid ${COLORS.border}`,
-    verticalAlign: "middle",
-  },
-
-  tdAction: {
-    padding: "14px 18px",
-    borderBottom:
-      `1px solid ${COLORS.border}`,
-    textAlign: "right",
-    verticalAlign: "middle",
-  },
-
-  companyCell: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-  },
-
-  companyAvatar: {
-    width: "38px",
-    height: "38px",
-    borderRadius: "12px",
-    background:
-      COLORS.lightBlue,
-    display: "flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    flexShrink: 0,
-  },
-
-  companyName: {
-    color: COLORS.navy,
-    fontSize: "12px",
-    fontWeight: 900,
-  },
-
-  companyMeta: {
-    color: COLORS.muted,
-    fontSize: "10px",
-    marginTop: "2px",
-  },
-
-  packageBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "5px",
-    background: "#FFF7D6",
-    color: "#8A6300",
-    borderRadius: "999px",
-    padding: "6px 9px",
-    fontSize: "10px",
-    fontWeight: 900,
-  },
-
-  dateText: {
-    color: COLORS.text,
-    fontSize: "11px",
-  },
-
-  durationText: {
-    color: COLORS.navy,
-    fontSize: "11px",
-    fontWeight: 800,
-  },
-
-  priceText: {
-    color: COLORS.blue,
-    fontSize: "11px",
-    fontWeight: 900,
-  },
-
-  statusBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "5px",
-    borderRadius: "999px",
-    padding: "6px 9px",
-    fontSize: "10px",
-    fontWeight: 900,
-  },
-
-  viewButton: {
-    minHeight: "34px",
-    borderRadius: "10px",
-    border: "none",
-    background:
-      COLORS.lightBlue,
-    color: COLORS.blue,
-    padding: "0 10px",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "5px",
-    cursor: "pointer",
-    fontWeight: 900,
-    fontSize: "11px",
-  },
-
-  emptyState: {
-    padding: "42px 20px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    textAlign: "center",
-  },
-
-  emptyTitle: {
-    marginTop: "10px",
-    color: COLORS.navy,
-    fontSize: "14px",
-    fontWeight: 900,
-  },
-
-  emptyText: {
-    marginTop: "4px",
-    color: COLORS.muted,
-    fontSize: "12px",
-  },
-
-  prototypeNotice: {
-    marginTop: "18px",
-    border:
-      "1px solid #F2D2A4",
-    background: "#FFF7ED",
-    borderRadius: "16px",
-    padding: "13px",
-    display: "flex",
-    gap: "9px",
-    alignItems: "flex-start",
-  },
-
-  prototypeNoticeTitle: {
-    color: COLORS.warning,
-    fontSize: "11px",
-    fontWeight: 900,
-  },
-
-  prototypeNoticeText: {
-    color: COLORS.muted,
-    fontSize: "11px",
-    lineHeight: 1.5,
-    marginTop: "2px",
-  },
-
-  modalBackdrop: {
-    position: "fixed",
-    inset: 0,
-    background:
-      "rgba(15, 23, 42, 0.55)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    padding: "24px",
-    zIndex: 1000,
-  },
-
-  detailsModal: {
-    width: "min(760px, 100%)",
-    maxHeight: "90vh",
-    background:
-      COLORS.white,
-    borderRadius: "22px",
-    overflow: "hidden",
-    boxShadow:
-      "0 24px 70px rgba(15, 23, 42, 0.24)",
-    display: "flex",
-    flexDirection: "column",
-  },
-
-  modalHeader: {
-    padding: "17px 19px",
-    borderBottom:
-      `1px solid ${COLORS.border}`,
-    display: "flex",
-    justifyContent:
-      "space-between",
-    alignItems: "center",
-    gap: "14px",
-  },
-
-  modalEyebrow: {
-    color: COLORS.blue,
-    fontSize: "10px",
-    fontWeight: 900,
-    letterSpacing: "0.8px",
-  },
-
-  modalTitle: {
-    color: COLORS.navy,
-    fontSize: "20px",
-    fontWeight: 900,
-    marginTop: "3px",
-  },
-
-  iconButton: {
-    width: "38px",
-    height: "38px",
-    borderRadius: "11px",
-    border:
-      `1px solid ${COLORS.border}`,
-    background:
-      COLORS.white,
-    color: COLORS.navy,
-    display: "flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    cursor: "pointer",
-  },
-
-  modalBody: {
-    padding: "18px 19px",
-    overflowY: "auto",
-  },
-
-  statusHero: {
-    borderRadius: "16px",
-    padding: "14px",
-    display: "flex",
-    alignItems: "center",
-    gap: "11px",
-  },
-
-  statusHeroIcon: {
-    width: "48px",
-    height: "48px",
-    borderRadius: "14px",
-    background:
-      COLORS.white,
-    display: "flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    flexShrink: 0,
-  },
-
-  statusHeroTitle: {
-    fontSize: "13px",
-    fontWeight: 900,
-  },
-
-  statusHeroText: {
-    color: COLORS.muted,
-    fontSize: "11px",
-    lineHeight: 1.5,
-    marginTop: "2px",
-  },
-
-  sectionTitleWrap: {
-    marginTop: "20px",
-    marginBottom: "9px",
-  },
-
-  sectionTitle: {
-    color: COLORS.navy,
-    fontSize: "13px",
-    fontWeight: 900,
-  },
-
-  sectionSubtitle: {
-    color: COLORS.muted,
-    fontSize: "10px",
-    marginTop: "2px",
-  },
-
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(2, minmax(0, 1fr))",
-    gap: "10px",
-  },
-
-  infoCard: {
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "14px",
-    padding: "12px",
-    display: "flex",
-    alignItems: "center",
-    gap: "9px",
-    background: "#FBFCFD",
-  },
-
-  infoIcon: {
-    width: "38px",
-    height: "38px",
-    borderRadius: "12px",
-    background:
-      COLORS.lightBlue,
-    display: "flex",
-    alignItems: "center",
-    justifyContent:
-      "center",
-    flexShrink: 0,
-  },
-
-  infoLabel: {
-    color: COLORS.muted,
-    fontSize: "9px",
-    fontWeight: 800,
-  },
-
-  infoValue: {
-    color: COLORS.navy,
-    fontSize: "11px",
-    fontWeight: 900,
-    marginTop: "2px",
-    wordBreak: "break-word",
-  },
-
-  detailCard: {
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "15px",
-    overflow: "hidden",
-  },
-
-  detailRow: {
-    minHeight: "45px",
-    padding: "10px 13px",
-    display: "flex",
-    justifyContent:
-      "space-between",
-    alignItems: "center",
-    gap: "15px",
-    borderBottom:
-      `1px solid ${COLORS.border}`,
-  },
-
-  detailLabel: {
-    color: COLORS.muted,
-    fontSize: "10px",
-    fontWeight: 800,
-  },
-
-  detailValue: {
-    color: COLORS.navy,
-    fontSize: "11px",
-    fontWeight: 900,
-    textAlign: "right",
-  },
-
-  paymentPanel: {
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "16px",
-    padding: "14px",
-    background: "#FBFCFD",
-  },
-
-  paymentPanelHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-  },
-
-  paymentIcon: {
-    width: "43px",
-    height: "43px",
-    borderRadius: "13px",
-    background: COLORS.lightBlue,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-
-  paymentTitle: {
-    color: COLORS.navy,
-    fontSize: "13px",
-    fontWeight: 900,
-  },
-
-  paymentSubtitle: {
-    color: COLORS.muted,
-    fontSize: "10px",
-    marginTop: "2px",
-  },
-
-  verificationBadge: {
-    borderRadius: "999px",
-    padding: "6px 9px",
-    fontSize: "9px",
-    fontWeight: 900,
-    whiteSpace: "nowrap",
-  },
-
-  verificationBadgeSuccess: {
-    color: COLORS.success,
-    background: "#DCFCE7",
-  },
-
-  verificationBadgePending: {
-    color: COLORS.warning,
-    background: "#FFEDD5",
-  },
-
-  paymentDetailsGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(2, minmax(0, 1fr))",
-    gap: "9px",
-    marginTop: "13px",
-  },
-
-  paymentInfo: {
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "12px",
-    background: COLORS.white,
-    padding: "10px",
-  },
-
-  paymentInfoLabel: {
-    color: COLORS.muted,
-    fontSize: "9px",
-    fontWeight: 800,
-  },
-
-  paymentInfoValue: {
-    color: COLORS.navy,
-    fontSize: "11px",
-    fontWeight: 900,
-    marginTop: "3px",
-    wordBreak: "break-word",
-  },
-
-  proofCard: {
-    marginTop: "10px",
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "13px",
-    background: COLORS.white,
-    padding: "10px",
-    display: "flex",
-    alignItems: "center",
-    gap: "9px",
-  },
-
-  proofFileIcon: {
-    width: "40px",
-    height: "40px",
-    borderRadius: "12px",
-    background: COLORS.lightBlue,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-
-  proofFileName: {
-    color: COLORS.navy,
-    fontSize: "11px",
-    fontWeight: 900,
-  },
-
-  proofFileText: {
-    color: COLORS.muted,
-    fontSize: "9px",
-    marginTop: "2px",
-  },
-
-  viewProofButton: {
-    minHeight: "34px",
-    borderRadius: "10px",
-    border:
-      `1px solid ${COLORS.blue}`,
-    background: COLORS.white,
-    color: COLORS.blue,
-    padding: "0 10px",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "5px",
-    cursor: "pointer",
-    fontSize: "10px",
-    fontWeight: 900,
-  },
-
-  verifyPaymentButton: {
-    width: "100%",
-    minHeight: "42px",
-    marginTop: "11px",
-    borderRadius: "12px",
-    border: "none",
-    background: COLORS.blue,
-    color: COLORS.white,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "7px",
-    cursor: "pointer",
-    fontSize: "11px",
-    fontWeight: 900,
-  },
-
-  verifiedNotice: {
-    marginTop: "11px",
-    border: "1px solid #BBF7D0",
-    borderRadius: "12px",
-    background: "#F0FDF4",
-    padding: "10px",
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "8px",
-  },
-
-  verifiedNoticeTitle: {
-    color: COLORS.success,
-    fontSize: "10px",
-    fontWeight: 900,
-  },
-
-  verifiedNoticeText: {
-    color: COLORS.muted,
-    fontSize: "9px",
-    marginTop: "2px",
-  },
-
-  rejectionCard: {
-    marginTop: "14px",
-    border:
-      "1px solid #F2C7CD",
-    background: "#FFF1F2",
-    borderRadius: "14px",
-    padding: "12px",
-    display: "flex",
-    gap: "9px",
-    alignItems: "flex-start",
-  },
-
-  rejectionTitle: {
-    color: COLORS.danger,
-    fontSize: "10px",
-    fontWeight: 900,
-  },
-
-  rejectionText: {
-    color: COLORS.muted,
-    fontSize: "10px",
-    lineHeight: 1.5,
-    marginTop: "2px",
-  },
-
-  activeNotice: {
-    marginTop: "14px",
-    border:
-      "1px solid #C8E8D0",
-    background: "#F0FDF4",
-    borderRadius: "14px",
-    padding: "12px",
-    display: "flex",
-    gap: "9px",
-    alignItems: "flex-start",
-  },
-
-  activeNoticeTitle: {
-    color: COLORS.success,
-    fontSize: "10px",
-    fontWeight: 900,
-  },
-
-  activeNoticeText: {
-    color: COLORS.muted,
-    fontSize: "10px",
-    lineHeight: 1.5,
-    marginTop: "2px",
-  },
-
-  modalFooter: {
-    padding: "14px 19px",
-    borderTop:
-      `1px solid ${COLORS.border}`,
-    display: "flex",
-    justifyContent:
-      "flex-end",
-    gap: "9px",
-    alignItems: "center",
-  },
-
-  rejectButton: {
-    minHeight: "42px",
-    borderRadius: "12px",
-    border:
-      "1px solid #F2C7CD",
-    background: "#FFF1F2",
-    color: COLORS.danger,
-    padding: "0 14px",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "7px",
-    cursor: "pointer",
-    fontSize: "11px",
-    fontWeight: 900,
-  },
-
-  approveButton: {
-    minHeight: "42px",
-    borderRadius: "12px",
-    border: "none",
-    background: COLORS.gold,
-    color: COLORS.navy,
-    padding: "0 15px",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "7px",
-    cursor: "pointer",
-    fontSize: "11px",
-    fontWeight: 900,
-  },
-
-  disabledButton: {
-    opacity: 0.45,
-    cursor: "not-allowed",
-  },
-
-  activeFooterText: {
-    display: "flex",
-    alignItems: "center",
-    gap: "7px",
-    color: COLORS.success,
-    fontSize: "11px",
-    fontWeight: 900,
-  },
-
-  rejectModal: {
-    width: "min(520px, 100%)",
-    background:
-      COLORS.white,
-    borderRadius: "20px",
-    overflow: "hidden",
-    boxShadow:
-      "0 24px 70px rgba(15, 23, 42, 0.24)",
-  },
-
-  rejectModalTitle: {
-    color: COLORS.navy,
-    fontSize: "17px",
-    fontWeight: 900,
-    marginTop: "3px",
-  },
-
-  rejectBody: {
-    padding: "17px 19px",
-  },
-
-  textareaLabel: {
-    display: "block",
-    color: COLORS.navy,
-    fontSize: "11px",
-    fontWeight: 900,
-    marginBottom: "7px",
-  },
-
-  textarea: {
-    width: "100%",
-    minHeight: "120px",
-    resize: "vertical",
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "13px",
-    background: "#FBFCFD",
-    color: COLORS.text,
-    padding: "11px",
-    font: "inherit",
-    boxSizing: "border-box",
-    outline: "none",
-  },
-
-  rejectHint: {
-    color: COLORS.muted,
-    fontSize: "10px",
-    marginTop: "6px",
-  },
-
-  rejectFooter: {
-    padding: "13px 19px",
-    borderTop:
-      `1px solid ${COLORS.border}`,
-    display: "flex",
-    justifyContent:
-      "flex-end",
-    gap: "8px",
-  },
-
-  cancelButton: {
-    minHeight: "40px",
-    borderRadius: "11px",
-    border:
-      `1px solid ${COLORS.border}`,
-    background:
-      COLORS.white,
-    color: COLORS.navy,
-    padding: "0 13px",
-    cursor: "pointer",
-    fontWeight: 900,
-  },
-
-  confirmRejectButton: {
-    minHeight: "40px",
-    borderRadius: "11px",
-    border: "none",
-    background:
-      COLORS.danger,
-    color: COLORS.white,
-    padding: "0 13px",
-    cursor: "pointer",
-    fontWeight: 900,
-  },
-
-  proofModal: {
-    width: "min(500px, 100%)",
-    maxHeight: "92vh",
-    background: COLORS.white,
-    borderRadius: "20px",
-    overflow: "hidden",
-    boxShadow:
-      "0 24px 70px rgba(15, 23, 42, 0.24)",
-    display: "flex",
-    flexDirection: "column",
-  },
-
-  proofModalBody: {
-    padding: "18px",
-    overflowY: "auto",
-    background: "#EEF3F6",
-  },
-
-  sampleReceipt: {
-    borderRadius: "18px",
-    background: COLORS.white,
-    padding: "19px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    boxShadow:
-      "0 10px 30px rgba(15, 23, 42, 0.10)",
-  },
-
-  receiptBrand: {
-    width: "100%",
-    display: "flex",
-    alignItems: "center",
-    gap: "9px",
-    marginBottom: "20px",
-  },
-
-  receiptBrandIcon: {
-    width: "44px",
-    height: "44px",
-    borderRadius: "14px",
-    background: "#E7F3FF",
-    color: "#1677D2",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  receiptBrandName: {
-    color: "#1677D2",
-    fontSize: "17px",
-    fontWeight: 900,
-  },
-
-  receiptBrandSubtext: {
-    color: COLORS.muted,
-    fontSize: "9px",
-    marginTop: "1px",
-  },
-
-  receiptSuccess: {
-    color: COLORS.success,
-    fontSize: "13px",
-    fontWeight: 900,
-    marginTop: "8px",
-  },
-
-  receiptAmount: {
-    color: COLORS.navy,
-    fontSize: "30px",
-    fontWeight: 900,
-    marginTop: "5px",
-  },
-
-  receiptDetails: {
-    width: "100%",
-    marginTop: "18px",
-    border:
-      `1px solid ${COLORS.border}`,
-    borderRadius: "14px",
-    overflow: "hidden",
-  },
-
-  receiptPrototypeNote: {
-    width: "100%",
-    marginTop: "13px",
-    borderRadius: "11px",
-    background: "#FFF7ED",
-    color: COLORS.warning,
-    padding: "9px",
-    textAlign: "center",
-    fontSize: "9px",
-    fontWeight: 800,
-  },
-};

@@ -1,4 +1,8 @@
-import { useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import {
   Bell,
   BriefcaseBusiness,
@@ -18,6 +22,9 @@ import {
 import {
   useAdminAuth,
 } from "../contexts/AdminAuthContext";
+import {
+  loadAdminSponsorshipRequests,
+} from "../lib/sponsorships";
 
 const navItems = [
   {
@@ -57,6 +64,61 @@ export default function AdminLayout() {
 
   const [isLoggingOut, setIsLoggingOut] =
     useState(false);
+
+  const [pendingSponsorships, setPendingSponsorships] =
+    useState(0);
+
+  const refreshPendingSponsorships =
+    useCallback(async () => {
+      try {
+        const requests =
+          await loadAdminSponsorshipRequests();
+
+        setPendingSponsorships(
+          requests.filter(
+            (request) =>
+              request.status === "Pending"
+          ).length
+        );
+      } catch {
+        setPendingSponsorships(0);
+      }
+    }, []);
+
+  useEffect(() => {
+    const handleChange = () => {
+      void refreshPendingSponsorships();
+    };
+
+    const initialRefresh =
+      window.setTimeout(
+        handleChange,
+        0
+      );
+
+    window.addEventListener(
+      "cargo:sponsorships-changed",
+      handleChange
+    );
+    window.addEventListener(
+      "focus",
+      handleChange
+    );
+
+    return () => {
+      window.clearTimeout(
+        initialRefresh
+      );
+      window.removeEventListener(
+        "cargo:sponsorships-changed",
+        handleChange
+      );
+      window.removeEventListener(
+        "focus",
+        handleChange
+      );
+    };
+  }, [refreshPendingSponsorships]);
 
   const adminName =
     admin?.name || "Administrator";
@@ -147,9 +209,10 @@ export default function AdminLayout() {
                 )}
 
                 {item.label ===
-                  "Sponsored Listings" && (
+                  "Sponsored Listings" &&
+                  pendingSponsorships > 0 && (
                   <span className="nav-badge">
-                    1
+                    {pendingSponsorships}
                   </span>
                 )}
               </NavLink>

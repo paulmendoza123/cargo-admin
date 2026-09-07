@@ -65,7 +65,13 @@ export function AdminAuthProvider({
     }, []);
 
   useEffect(() => {
-    void refreshSession();
+    const initialRefresh =
+      window.setTimeout(
+        () => {
+          void refreshSession();
+        },
+        0
+      );
 
     const {
       data: { subscription },
@@ -101,6 +107,9 @@ export function AdminAuthProvider({
       );
 
     return () => {
+      window.clearTimeout(
+        initialRefresh
+      );
       subscription.unsubscribe();
     };
   }, [refreshSession]);
@@ -144,6 +153,8 @@ export function AdminAuthProvider({
   );
 }
 
+// The provider and its matching hook intentionally share this module.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAdminAuth() {
   const context =
     useContext(AdminAuthContext);

@@ -1,75 +1,48 @@
-# React + TypeScript + Vite
+# CargoTrackPH Admin Portal
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React, TypeScript, Vite, and Supabase administrator portal for CargoTrackPH.
 
-Currently, two official plugins are available:
+## Local setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Copy the required environment variables into `.env.local`:
 
-## React Compiler
+   ```env
+   VITE_SUPABASE_URL=your-project-url
+   VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+   ```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+2. Install dependencies and start the portal:
 
-## Expanding the ESLint configuration
+   ```bash
+   npm install
+   npm run dev
+   ```
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+3. Use a Supabase Auth account whose `profiles` row has `role = 'admin'` and
+   `account_status = 'active'`.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Sponsorship workflow
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+The Sponsored Listings page reads live requests submitted by the Expo business
+app. It supports:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- payment receipt review through short-lived signed URLs;
+- approve/reject actions through administrator-only RPCs;
+- sponsored placement enable/disable controls;
+- editable package name, duration, price, description, and availability;
+- editable GCash checkout settings;
+- live pending-request badge in the sidebar.
 
-```
+Run [supabase/admin-sponsorship-workflow.sql](supabase/admin-sponsorship-workflow.sql)
+once in the same Supabase project before opening the page. The mobile
+`sponsorship-mobile-workflow.sql` migration must already be installed.
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Existing requests retain their submitted package name, duration, and price
+snapshots when package settings are edited.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Validation
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm run lint
+npm run build
 ```
