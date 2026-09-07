@@ -57,6 +57,19 @@ once before opening the page. See
 [ADMIN_BUSINESS_MANAGEMENT_SETUP.md](ADMIN_BUSINESS_MANAGEMENT_SETUP.md) for the
 test checklist and security behavior.
 
+## Live dashboard
+
+The Dashboard and shared top-bar review queue now use live Supabase data. The
+dashboard shows real platform totals, pending applications, recently approved
+businesses, booking totals, sponsorship reviews, and customer ID reviews. The
+Applications sidebar badge is live, and each bell item opens the matching admin
+review page.
+
+Run [supabase/admin-dashboard.sql](supabase/admin-dashboard.sql) once before
+opening the Dashboard. See
+[ADMIN_DASHBOARD_SETUP.md](ADMIN_DASHBOARD_SETUP.md) for the verification
+checklist.
+
 ## Validation
 
 ```bash

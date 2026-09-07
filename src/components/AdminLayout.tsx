@@ -6,6 +6,7 @@ import {
 import {
   Bell,
   BriefcaseBusiness,
+  CheckCircle2,
   FileCheck2,
   LayoutDashboard,
   LogOut,
@@ -23,8 +24,12 @@ import {
   useAdminAuth,
 } from "../contexts/AdminAuthContext";
 import {
-  loadAdminSponsorshipRequests,
-} from "../lib/sponsorships";
+  loadAdminDashboard,
+} from "../lib/dashboard";
+import type {
+  AdminDashboardSummary,
+} from "../lib/dashboard";
+import "./AdminLayout.css";
 
 const navItems = [
   {
@@ -65,29 +70,29 @@ export default function AdminLayout() {
   const [isLoggingOut, setIsLoggingOut] =
     useState(false);
 
-  const [pendingSponsorships, setPendingSponsorships] =
-    useState(0);
+  const [dashboardSummary, setDashboardSummary] =
+    useState<AdminDashboardSummary | null>(null);
+  const [notificationsOpen, setNotificationsOpen] =
+    useState(false);
 
-  const refreshPendingSponsorships =
+  const refreshDashboardSummary =
     useCallback(async () => {
       try {
-        const requests =
-          await loadAdminSponsorshipRequests();
-
-        setPendingSponsorships(
-          requests.filter(
-            (request) =>
-              request.status === "Pending"
-          ).length
-        );
+        const dashboard = await loadAdminDashboard();
+        setDashboardSummary(dashboard.summary);
       } catch {
-        setPendingSponsorships(0);
+        setDashboardSummary(null);
       }
     }, []);
 
   useEffect(() => {
     const handleChange = () => {
-      void refreshPendingSponsorships();
+      void refreshDashboardSummary();
+    };
+
+    const handleDashboardLoaded = (event: Event) => {
+      const customEvent = event as CustomEvent<AdminDashboardSummary>;
+      setDashboardSummary(customEvent.detail);
     };
 
     const initialRefresh =
@@ -99,6 +104,22 @@ export default function AdminLayout() {
     window.addEventListener(
       "cargo:sponsorships-changed",
       handleChange
+    );
+    window.addEventListener(
+      "cargo:applications-changed",
+      handleChange
+    );
+    window.addEventListener(
+      "cargo:businesses-changed",
+      handleChange
+    );
+    window.addEventListener(
+      "cargo:users-changed",
+      handleChange
+    );
+    window.addEventListener(
+      "cargo:dashboard-loaded",
+      handleDashboardLoaded
     );
     window.addEventListener(
       "focus",
@@ -114,11 +135,38 @@ export default function AdminLayout() {
         handleChange
       );
       window.removeEventListener(
+        "cargo:applications-changed",
+        handleChange
+      );
+      window.removeEventListener(
+        "cargo:businesses-changed",
+        handleChange
+      );
+      window.removeEventListener(
+        "cargo:users-changed",
+        handleChange
+      );
+      window.removeEventListener(
+        "cargo:dashboard-loaded",
+        handleDashboardLoaded
+      );
+      window.removeEventListener(
         "focus",
         handleChange
       );
     };
-  }, [refreshPendingSponsorships]);
+  }, [refreshDashboardSummary]);
+
+  const pendingApplications =
+    dashboardSummary?.pendingApplications ?? 0;
+  const pendingSponsorships =
+    dashboardSummary?.pendingSponsorships ?? 0;
+  const pendingIdentityVerifications =
+    dashboardSummary?.pendingIdentityVerifications ?? 0;
+  const totalNotifications =
+    pendingApplications +
+    pendingSponsorships +
+    pendingIdentityVerifications;
 
   const adminName =
     admin?.name || "Administrator";
@@ -155,10 +203,9 @@ export default function AdminLayout() {
     }
   };
 
-  const showNotificationsNotice = () => {
-    window.alert(
-      "Admin notifications will be added in a later update."
-    );
+  const openNotificationTarget = (path: string) => {
+    setNotificationsOpen(false);
+    navigate(path);
   };
 
   return (
@@ -202,9 +249,10 @@ export default function AdminLayout() {
                 <span>{item.label}</span>
 
                 {item.label ===
-                  "Applications" && (
+                  "Applications" &&
+                  pendingApplications > 0 && (
                   <span className="nav-badge">
-                    3
+                    {pendingApplications}
                   </span>
                 )}
 
@@ -260,17 +308,81 @@ export default function AdminLayout() {
           </div>
 
           <div className="topbar-actions">
-            <button
-              type="button"
-              className="notification-button"
-              onClick={
-                showNotificationsNotice
-              }
-              aria-label="Admin notifications"
-            >
-              <Bell size={20} />
-              <span className="notification-dot" />
-            </button>
+            <div className="admin-notification-wrap">
+              <button
+                type="button"
+                className={
+                  notificationsOpen
+                    ? "notification-button active"
+                    : "notification-button"
+                }
+                onClick={() =>
+                  setNotificationsOpen((current) => !current)
+                }
+                aria-label="Admin notifications"
+                aria-expanded={notificationsOpen}
+              >
+                <Bell size={20} />
+                {totalNotifications > 0 && (
+                  <>
+                    <span className="notification-dot" />
+                    <span className="notification-count">
+                      {totalNotifications > 99 ? "99+" : totalNotifications}
+                    </span>
+                  </>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <div className="admin-notification-menu">
+                  <div className="admin-notification-header">
+                    <div>
+                      <strong>Needs attention</strong>
+                      <span>Live administrator review queue</span>
+                    </div>
+                    <span>{totalNotifications}</span>
+                  </div>
+
+                  {totalNotifications === 0 ? (
+                    <div className="admin-notification-empty">
+                      <CheckCircle2 size={24} />
+                      <strong>All caught up</strong>
+                      <span>No pending administrator reviews.</span>
+                    </div>
+                  ) : (
+                    <div className="admin-notification-list">
+                      {pendingApplications > 0 && (
+                        <NotificationItem
+                          icon={<FileCheck2 size={18} />}
+                          title="Business applications"
+                          detail={`${pendingApplications} waiting for review`}
+                          count={pendingApplications}
+                          onClick={() => openNotificationTarget("/applications")}
+                        />
+                      )}
+                      {pendingSponsorships > 0 && (
+                        <NotificationItem
+                          icon={<Megaphone size={18} />}
+                          title="Sponsorship payments"
+                          detail={`${pendingSponsorships} waiting for verification`}
+                          count={pendingSponsorships}
+                          onClick={() => openNotificationTarget("/sponsored")}
+                        />
+                      )}
+                      {pendingIdentityVerifications > 0 && (
+                        <NotificationItem
+                          icon={<Users size={18} />}
+                          title="Customer ID submissions"
+                          detail={`${pendingIdentityVerifications} waiting for review`}
+                          count={pendingIdentityVerifications}
+                          onClick={() => openNotificationTarget("/users")}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="top-admin">
               <div className="top-admin-avatar">
@@ -290,5 +402,34 @@ export default function AdminLayout() {
         </main>
       </div>
     </div>
+  );
+}
+
+function NotificationItem({
+  icon,
+  title,
+  detail,
+  count,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  detail: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="admin-notification-item"
+      onClick={onClick}
+    >
+      <span className="admin-notification-icon">{icon}</span>
+      <span>
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      <b>{count}</b>
+    </button>
   );
 }

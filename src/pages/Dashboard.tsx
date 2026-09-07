@@ -1,149 +1,34 @@
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  AlertCircle,
   ArrowRight,
   BriefcaseBusiness,
   CheckCircle2,
   Clock3,
   FileCheck2,
+  Loader2,
   MapPin,
+  Megaphone,
+  RefreshCw,
   ShieldCheck,
   Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-type DashboardApplication = {
-  id: string;
-  businessName: string;
-  representativeName: string;
-  submittedAt: string;
-  status: "Pending" | "Approved" | "Rejected";
-};
-
-type DashboardBusiness = {
-  id: string;
-  name: string;
-  address: string;
-  status: "Active" | "Suspended";
-  approvedDate: string;
-  destinations: string[];
-};
-
-type DashboardUser = {
-  role?: string;
-  type?: string;
-  accountType?: string;
-};
-
-const APPLICATIONS_STORAGE_KEY =
-  "cargo-track-admin-business-applications-v1";
-
-const BUSINESSES_STORAGE_KEY =
-  "cargo-track-admin-businesses-v1";
-
-const USERS_STORAGE_KEY =
-  "cargo-track-admin-users-v1";
-
-const FALLBACK_APPLICATIONS: DashboardApplication[] = [
-  {
-    id: "APP-2026-0001",
-    businessName: "Palawan Sky Cargo",
-    representativeName: "Maria Santos",
-    submittedAt: "2026-08-28T14:45:00.000Z",
-    status: "Pending",
-  },
-  {
-    id: "APP-2026-0002",
-    businessName: "Puerto Freight Link",
-    representativeName: "Carlo Reyes",
-    submittedAt: "2026-08-27T09:30:00.000Z",
-    status: "Approved",
-  },
-  {
-    id: "APP-2026-0003",
-    businessName: "Harbor Cargo Palawan",
-    representativeName: "Ana Mendoza",
-    submittedAt: "2026-08-26T08:15:00.000Z",
-    status: "Rejected",
-  },
-];
-
-const FALLBACK_BUSINESSES: DashboardBusiness[] = [
-  {
-    id: "BUS-001",
-    name: "ABC Cargo Express",
-    address: "Puerto Princesa City, Palawan",
-    status: "Active",
-    approvedDate: "Aug 10, 2026",
-    destinations: ["Manila", "Cebu", "Davao"],
-  },
-  {
-    id: "BUS-002",
-    name: "XYZ Cargo Services",
-    address: "Puerto Princesa City, Palawan",
-    status: "Active",
-    approvedDate: "Aug 8, 2026",
-    destinations: ["Manila", "Cebu"],
-  },
-  {
-    id: "BUS-003",
-    name: "Palawan Cargo Lines",
-    address: "Puerto Princesa City, Palawan",
-    status: "Active",
-    approvedDate: "Aug 5, 2026",
-    destinations: ["Manila", "Davao"],
-  },
-  {
-    id: "BUS-004",
-    name: "Island Freight Palawan",
-    address: "Puerto Princesa City, Palawan",
-    status: "Suspended",
-    approvedDate: "Jul 29, 2026",
-    destinations: ["Cebu", "Davao"],
-  },
-];
-
-function readStoredArray<T>(storageKey: string, fallback: T[]): T[] {
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-
-    if (!raw) return fallback;
-
-    const parsed = JSON.parse(raw);
-
-    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function readCustomerCount() {
-  try {
-    const raw = window.localStorage.getItem(USERS_STORAGE_KEY);
-
-    if (!raw) return 48;
-
-    const users = JSON.parse(raw) as DashboardUser[];
-
-    if (!Array.isArray(users)) return 48;
-
-    return users.filter((user) => {
-      const accountType = (
-        user.role ||
-        user.type ||
-        user.accountType ||
-        ""
-      ).toLowerCase();
-
-      return accountType.includes("customer");
-    }).length;
-  } catch {
-    return 48;
-  }
-}
+import { useAdminAuth } from "../contexts/AdminAuthContext";
+import { loadAdminDashboard } from "../lib/dashboard";
+import type { AdminDashboardData } from "../lib/dashboard";
+import "./Dashboard.css";
 
 function formatDate(value: string) {
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) return "—";
 
   return new Intl.DateTimeFormat("en-PH", {
     month: "short",
@@ -153,66 +38,105 @@ function formatDate(value: string) {
 }
 
 export default function Dashboard() {
-  const applications = readStoredArray<DashboardApplication>(
-    APPLICATIONS_STORAGE_KEY,
-    FALLBACK_APPLICATIONS
+  const { admin } = useAdminAuth();
+  const [dashboard, setDashboard] =
+    useState<AdminDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pageError, setPageError] = useState("");
+
+  const loadDashboard = useCallback(async (quiet = false) => {
+    if (quiet) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setPageError("");
+
+    try {
+      const nextDashboard = await loadAdminDashboard();
+      setDashboard(nextDashboard);
+      window.dispatchEvent(
+        new CustomEvent("cargo:dashboard-loaded", {
+          detail: nextDashboard.summary,
+        })
+      );
+    } catch (error) {
+      console.error("Unable to load admin dashboard:", error);
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load the administrator dashboard."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => {
+      void loadDashboard();
+    }, 0);
+
+    const refresh = () => {
+      void loadDashboard(true);
+    };
+
+    window.addEventListener("focus", refresh);
+    window.addEventListener("cargo:applications-changed", refresh);
+    window.addEventListener("cargo:businesses-changed", refresh);
+    window.addEventListener("cargo:sponsorships-changed", refresh);
+    window.addEventListener("cargo:users-changed", refresh);
+
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("cargo:applications-changed", refresh);
+      window.removeEventListener("cargo:businesses-changed", refresh);
+      window.removeEventListener("cargo:sponsorships-changed", refresh);
+      window.removeEventListener("cargo:users-changed", refresh);
+    };
+  }, [loadDashboard]);
+
+  const summary = dashboard?.summary;
+  const pendingApplications = dashboard?.pendingApplications || [];
+  const recentBusinesses = dashboard?.recentBusinesses || [];
+
+  const stats = useMemo(
+    () => [
+      {
+        title: "Total Businesses",
+        value: summary?.totalBusinesses ?? 0,
+        subtitle: `${summary?.suspendedBusinesses ?? 0} suspended`,
+        icon: BriefcaseBusiness,
+        className: "blue",
+      },
+      {
+        title: "Pending Applications",
+        value: summary?.pendingApplications ?? 0,
+        subtitle: "Waiting for review",
+        icon: Clock3,
+        className: "yellow",
+      },
+      {
+        title: "Active Businesses",
+        value: summary?.activeBusinesses ?? 0,
+        subtitle: `${summary?.totalBookings ?? 0} total bookings`,
+        icon: CheckCircle2,
+        className: "green",
+      },
+      {
+        title: "Customer Accounts",
+        value: summary?.customerAccounts ?? 0,
+        subtitle: `${summary?.pendingIdentityVerifications ?? 0} ID reviews pending`,
+        icon: Users,
+        className: "purple",
+      },
+    ],
+    [summary]
   );
-
-  const businesses = readStoredArray<DashboardBusiness>(
-    BUSINESSES_STORAGE_KEY,
-    FALLBACK_BUSINESSES
-  );
-
-  const pendingApplications = applications
-    .filter((application) => application.status === "Pending")
-    .sort(
-      (a, b) =>
-        new Date(b.submittedAt).getTime() -
-        new Date(a.submittedAt).getTime()
-    );
-
-  const activeBusinesses = businesses.filter(
-    (business) => business.status === "Active"
-  );
-
-  const recentBusinesses = [...activeBusinesses]
-    .sort(
-      (a, b) =>
-        new Date(b.approvedDate).getTime() -
-        new Date(a.approvedDate).getTime()
-    )
-    .slice(0, 3);
-
-  const stats = [
-    {
-      title: "Total Businesses",
-      value: businesses.length.toString(),
-      subtitle: "Registered cargo companies",
-      icon: BriefcaseBusiness,
-      className: "blue",
-    },
-    {
-      title: "Pending Applications",
-      value: pendingApplications.length.toString(),
-      subtitle: "Waiting for review",
-      icon: Clock3,
-      className: "yellow",
-    },
-    {
-      title: "Active Businesses",
-      value: activeBusinesses.length.toString(),
-      subtitle: "Currently active",
-      icon: CheckCircle2,
-      className: "green",
-    },
-    {
-      title: "Customer Accounts",
-      value: readCustomerCount().toString(),
-      subtitle: "Registered customers",
-      icon: Users,
-      className: "purple",
-    },
-  ];
 
   const today = new Intl.DateTimeFormat("en-PH", {
     month: "long",
@@ -227,35 +151,61 @@ export default function Dashboard() {
           <p className="eyebrow">ADMINISTRATION</p>
           <h2>Dashboard</h2>
           <p className="page-description">
-            Monitor Cargo Track PH businesses, applications, and users.
+            Monitor live Cargo Track PH businesses, applications, and users.
           </p>
         </div>
 
-        <div className="date-card">
-          <span>Today</span>
-          <strong>{today}</strong>
+        <div className="dashboard-heading-actions">
+          <button
+            type="button"
+            className="dashboard-refresh-button"
+            onClick={() => void loadDashboard(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw
+              size={15}
+              className={refreshing ? "spin" : ""}
+            />
+            Refresh
+          </button>
+          <div className="date-card">
+            <span>Today</span>
+            <strong>{today}</strong>
+          </div>
         </div>
       </div>
+
+      {pageError && (
+        <div className="dashboard-error-banner">
+          <AlertCircle size={19} />
+          <div>
+            <strong>Dashboard data could not be loaded.</strong>
+            <span>{pageError}</span>
+          </div>
+          <button type="button" onClick={() => void loadDashboard()}>
+            Try again
+          </button>
+        </div>
+      )}
 
       <section className="welcome-card">
         <div className="welcome-content">
           <div className="welcome-icon">
             <ShieldCheck size={28} />
           </div>
-
           <div>
             <p className="welcome-small">SYSTEM ADMINISTRATION</p>
-            <h3>Welcome back, Administrator</h3>
+            <h3>Welcome back, {admin?.name || "Administrator"}</h3>
             <p>
-              Review business applications and monitor the Cargo Track PH
-              platform from one dashboard.
+              Review pending work and monitor the live Cargo Track PH platform
+              from one dashboard.
             </p>
           </div>
         </div>
 
-        <div className="system-online">
+        <div className={`system-online ${pageError ? "offline" : ""}`}>
           <span />
-          Prototype System Active
+          {pageError ? "Connection needs attention" : "Live backend connected"}
         </div>
       </section>
 
@@ -268,8 +218,9 @@ export default function Dashboard() {
               <div className={`stat-icon ${stat.className}`}>
                 <Icon size={23} />
               </div>
-
-              <div className="stat-value">{stat.value}</div>
+              <div className="stat-value">
+                {loading && !dashboard ? "—" : stat.value}
+              </div>
               <h4>{stat.title}</h4>
               <p>{stat.subtitle}</p>
             </div>
@@ -284,7 +235,6 @@ export default function Dashboard() {
               <p className="panel-eyebrow">REQUIRES ATTENTION</p>
               <h3>Pending Applications</h3>
             </div>
-
             <Link to="/applications" className="view-all">
               View all
               <ArrowRight size={16} />
@@ -301,36 +251,49 @@ export default function Dashboard() {
                   <th>Status</th>
                 </tr>
               </thead>
-
               <tbody>
-                {pendingApplications.slice(0, 3).map((application) => (
-                  <tr key={application.id}>
-                    <td>
-                      <div className="company-cell">
-                        <div className="table-icon yellow">
-                          <FileCheck2 size={18} />
-                        </div>
-
-                        <strong>{application.businessName}</strong>
+                {loading && !dashboard ? (
+                  <tr>
+                    <td colSpan={4}>
+                      <div className="dashboard-table-state">
+                        <Loader2 size={17} className="spin" />
+                        Loading applications...
                       </div>
                     </td>
-
-                    <td>{application.representativeName}</td>
-                    <td>{formatDate(application.submittedAt)}</td>
-
-                    <td>
-                      <span className="status pending">
-                        <span />
-                        Pending
-                      </span>
-                    </td>
                   </tr>
-                ))}
+                ) : (
+                  pendingApplications.slice(0, 3).map((application) => (
+                    <tr key={application.id}>
+                      <td>
+                        <div className="company-cell">
+                          <div className="table-icon yellow">
+                            <FileCheck2 size={18} />
+                          </div>
+                          <div className="dashboard-company-copy">
+                            <strong>{application.businessName}</strong>
+                            <span>{application.applicationCode}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{application.representativeName}</td>
+                      <td>{formatDate(application.submittedAt)}</td>
+                      <td>
+                        <span className="status pending">
+                          <span />
+                          Pending
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
 
-                {pendingApplications.length === 0 && (
+                {!loading && pendingApplications.length === 0 && (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: "center" }}>
-                      No pending applications.
+                    <td colSpan={4}>
+                      <div className="dashboard-table-state success">
+                        <CheckCircle2 size={18} />
+                        No pending applications.
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -347,49 +310,34 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <Link to="/applications" className="quick-action">
-            <div className="quick-action-icon yellow">
-              <FileCheck2 size={21} />
-            </div>
-
-            <div>
-              <strong>Review Applications</strong>
-              <span>
-                {pendingApplications.length}{" "}
-                {pendingApplications.length === 1
-                  ? "business waiting"
-                  : "businesses waiting"}
-              </span>
-            </div>
-
-            <ArrowRight size={17} />
-          </Link>
-
-          <Link to="/businesses" className="quick-action">
-            <div className="quick-action-icon blue">
-              <BriefcaseBusiness size={21} />
-            </div>
-
-            <div>
-              <strong>Manage Businesses</strong>
-              <span>View cargo companies</span>
-            </div>
-
-            <ArrowRight size={17} />
-          </Link>
-
-          <Link to="/users" className="quick-action">
-            <div className="quick-action-icon purple">
-              <Users size={21} />
-            </div>
-
-            <div>
-              <strong>Manage Users</strong>
-              <span>Customer &amp; business accounts</span>
-            </div>
-
-            <ArrowRight size={17} />
-          </Link>
+          <QuickAction
+            to="/applications"
+            tone="yellow"
+            icon={<FileCheck2 size={21} />}
+            title="Review Applications"
+            subtitle={`${summary?.pendingApplications ?? 0} waiting for review`}
+          />
+          <QuickAction
+            to="/sponsored"
+            tone="yellow"
+            icon={<Megaphone size={21} />}
+            title="Review Sponsorships"
+            subtitle={`${summary?.pendingSponsorships ?? 0} payment reviews pending`}
+          />
+          <QuickAction
+            to="/businesses"
+            tone="blue"
+            icon={<BriefcaseBusiness size={21} />}
+            title="Manage Businesses"
+            subtitle={`${summary?.activeBusinesses ?? 0} active companies`}
+          />
+          <QuickAction
+            to="/users"
+            tone="purple"
+            icon={<Users size={21} />}
+            title="Manage Users"
+            subtitle={`${summary?.pendingIdentityVerifications ?? 0} ID reviews pending`}
+          />
         </div>
       </section>
 
@@ -399,45 +347,83 @@ export default function Dashboard() {
             <p className="panel-eyebrow">RECENTLY APPROVED</p>
             <h3>Registered Businesses</h3>
           </div>
-
           <Link to="/businesses" className="view-all">
             View all
             <ArrowRight size={16} />
           </Link>
         </div>
 
-        <div className="business-grid">
-          {recentBusinesses.map((business) => (
-            <div className="business-mini-card" key={business.id}>
-              <div className="business-mini-icon">
-                <BriefcaseBusiness size={23} />
-              </div>
-
-              <div className="business-mini-content">
-                <strong>{business.name}</strong>
-
-                <span>
-                  <MapPin size={13} />
-                  {business.address}
+        {loading && !dashboard ? (
+          <div className="dashboard-business-state">
+            <Loader2 size={19} className="spin" />
+            Loading businesses...
+          </div>
+        ) : recentBusinesses.length === 0 ? (
+          <div className="dashboard-business-state">
+            No active businesses yet.
+          </div>
+        ) : (
+          <div className="business-grid">
+            {recentBusinesses.map((business) => (
+              <div className="business-mini-card" key={business.id}>
+                <div className="business-mini-icon">
+                  {business.logoUrl ? (
+                    <img src={business.logoUrl} alt={`${business.name} logo`} />
+                  ) : (
+                    <BriefcaseBusiness size={23} />
+                  )}
+                </div>
+                <div className="business-mini-content">
+                  <strong>{business.name}</strong>
+                  <span className="dashboard-business-code">
+                    {business.businessCode}
+                  </span>
+                  <span>
+                    <MapPin size={13} />
+                    {business.address}
+                  </span>
+                  <p>
+                    {business.destinationsCount}{" "}
+                    {business.destinationsCount === 1
+                      ? "destination"
+                      : "destinations"}{" "}
+                    available
+                  </p>
+                </div>
+                <span className="status active">
+                  <span />
+                  Active
                 </span>
-
-                <p>
-                  {business.destinations.length}{" "}
-                  {business.destinations.length === 1
-                    ? "destination"
-                    : "destinations"}{" "}
-                  available
-                </p>
               </div>
-
-              <span className="status active">
-                <span />
-                Active
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </>
+  );
+}
+
+function QuickAction({
+  to,
+  tone,
+  icon,
+  title,
+  subtitle,
+}: {
+  to: string;
+  tone: string;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <Link to={to} className="quick-action">
+      <div className={`quick-action-icon ${tone}`}>{icon}</div>
+      <div>
+        <strong>{title}</strong>
+        <span>{subtitle}</span>
+      </div>
+      <ArrowRight size={17} />
+    </Link>
   );
 }

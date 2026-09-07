@@ -561,6 +561,9 @@ export default function Applications() {
         }
 
         await loadApplications();
+        window.dispatchEvent(
+          new Event("cargo:applications-changed")
+        );
 
         return true;
       } catch (error) {

@@ -501,6 +501,9 @@ export default function Users() {
           ? { ...currentUser, status }
           : null
       );
+      window.dispatchEvent(
+        new Event("cargo:users-changed")
+      );
     } catch (error) {
       console.error("Unable to update account:", error);
 
@@ -596,6 +599,10 @@ export default function Users() {
       if (nextStatus === "Verified") {
         setRejectionReason("");
       }
+
+      window.dispatchEvent(
+        new Event("cargo:users-changed")
+      );
     } catch (error) {
       console.error(
         "Unable to review identity document:",
