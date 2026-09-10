@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { ReactNode } from "react";
@@ -45,22 +46,43 @@ export function AdminAuthProvider({
   const [loading, setLoading] =
     useState(true);
 
+  const authCheckVersion =
+    useRef(0);
+
   const refreshSession =
     useCallback(async () => {
+      const checkVersion =
+        ++authCheckVersion.current;
+
       try {
         const session =
           await getAdminSession();
 
-        setAdmin(session);
+        if (
+          checkVersion ===
+          authCheckVersion.current
+        ) {
+          setAdmin(session);
+        }
       } catch (error) {
         console.error(
           "Unable to restore admin session:",
           error
         );
 
-        setAdmin(null);
+        if (
+          checkVersion ===
+          authCheckVersion.current
+        ) {
+          setAdmin(null);
+        }
       } finally {
-        setLoading(false);
+        if (
+          checkVersion ===
+          authCheckVersion.current
+        ) {
+          setLoading(false);
+        }
       }
     }, []);
 
@@ -78,6 +100,9 @@ export function AdminAuthProvider({
     } =
       supabase.auth.onAuthStateChange(
         (_event, session) => {
+          const checkVersion =
+            ++authCheckVersion.current;
+
           if (!session?.user) {
             setAdmin(null);
             setLoading(false);
@@ -89,7 +114,12 @@ export function AdminAuthProvider({
               session.user
             )
               .then((nextAdmin) => {
-                setAdmin(nextAdmin);
+                if (
+                  checkVersion ===
+                  authCheckVersion.current
+                ) {
+                  setAdmin(nextAdmin);
+                }
               })
               .catch((error) => {
                 console.error(
@@ -97,16 +127,27 @@ export function AdminAuthProvider({
                   error
                 );
 
-                setAdmin(null);
+                if (
+                  checkVersion ===
+                  authCheckVersion.current
+                ) {
+                  setAdmin(null);
+                }
               })
               .finally(() => {
-                setLoading(false);
+                if (
+                  checkVersion ===
+                  authCheckVersion.current
+                ) {
+                  setLoading(false);
+                }
               });
           }, 0);
         }
       );
 
     return () => {
+      authCheckVersion.current += 1;
       window.clearTimeout(
         initialRefresh
       );
@@ -130,8 +171,10 @@ export function AdminAuthProvider({
   );
 
   const signOut = useCallback(async () => {
+    authCheckVersion.current += 1;
     await signOutAdmin();
     setAdmin(null);
+    setLoading(false);
   }, []);
 
   const value = useMemo(
