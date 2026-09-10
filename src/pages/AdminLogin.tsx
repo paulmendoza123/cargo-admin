@@ -2,11 +2,13 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   Eye,
   EyeOff,
   LockKeyhole,
   Mail,
+  Send,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -15,28 +17,63 @@ import {
 } from "react-router-dom";
 
 import {
-  DEMO_ADMIN_EMAIL,
-  DEMO_ADMIN_PASSWORD,
-  isAdminAuthenticated,
-  signInAdmin,
-  validateDemoAdmin,
+  useAdminAuth,
+} from "../contexts/AdminAuthContext";
+import {
+  requestAdminPasswordReset,
 } from "../adminAuth";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
+  const {
+    admin,
+    loading,
+    signIn,
+  } = useAdminAuth();
+
+  const [email, setEmail] =
+    useState("");
+
   const [password, setPassword] =
     useState("");
+
   const [showPassword, setShowPassword] =
     useState(false);
-  const [error, setError] = useState("");
 
-  if (isAdminAuthenticated()) {
+  const [error, setError] =
+    useState("");
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
+  const [recoveryMode, setRecoveryMode] =
+    useState(false);
+
+  const [recoverySent, setRecoverySent] =
+    useState(false);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          color: "#123b5d",
+          fontWeight: 700,
+        }}
+      >
+        Checking administrator access...
+      </div>
+    );
+  }
+
+  if (admin) {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = (
+  const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
@@ -49,23 +86,51 @@ export default function AdminLogin() {
       return;
     }
 
-    if (
-      !validateDemoAdmin(email, password)
-    ) {
+    try {
+      setIsSubmitting(true);
+
+      await signIn(email, password);
+
+      navigate("/", {
+        replace: true,
+      });
+    } catch (signInError) {
       setError(
-        "The email or password is incorrect. Use the prototype credentials shown below."
+        signInError instanceof Error
+          ? signInError.message
+          : "Unable to sign in. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePasswordRecovery = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+    setError("");
+
+    if (!email.trim()) {
+      setError(
+        "Enter the administrator email address."
       );
       return;
     }
 
-    signInAdmin();
-    navigate("/", { replace: true });
-  };
-
-  const fillDemoCredentials = () => {
-    setEmail(DEMO_ADMIN_EMAIL);
-    setPassword(DEMO_ADMIN_PASSWORD);
-    setError("");
+    try {
+      setIsSubmitting(true);
+      await requestAdminPasswordReset(email);
+      setRecoverySent(true);
+    } catch (recoveryError) {
+      setError(
+        recoveryError instanceof Error
+          ? recoveryError.message
+          : "Unable to send the password reset email."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -84,7 +149,8 @@ export default function AdminLogin() {
           </div>
 
           <h1>
-            Manage Cargo Track PH with confidence.
+            Manage Cargo Track PH with
+            confidence.
           </h1>
 
           <p>
@@ -113,7 +179,7 @@ export default function AdminLogin() {
         </div>
 
         <div className="admin-login-brand-footer">
-          Prototype administration environment
+          Secure administration environment
         </div>
       </section>
 
@@ -124,16 +190,95 @@ export default function AdminLogin() {
           </div>
 
           <div className="admin-login-eyebrow">
-            AUTHORIZED ACCESS
+            {recoveryMode
+              ? "ACCOUNT RECOVERY"
+              : "AUTHORIZED ACCESS"}
           </div>
 
-          <h2>Welcome back, Admin</h2>
+          <h2>
+            {recoveryMode
+              ? "Reset admin password"
+              : "Welcome back, Admin"}
+          </h2>
 
           <p className="admin-login-description">
-            Sign in to continue to the Cargo Track PH
-            administration dashboard.
+            {recoveryMode
+              ? "Enter the administrator email address and we’ll send a secure password reset link."
+              : "Sign in to continue to the Cargo Track PH administration dashboard."}
           </p>
 
+          {recoveryMode ? (
+            <form onSubmit={handlePasswordRecovery}>
+              <label
+                className="admin-login-label"
+                htmlFor="recovery-email"
+              >
+                Administrator email
+              </label>
+
+              <div className="admin-login-input-wrap">
+                <Mail size={18} />
+
+                <input
+                  id="recovery-email"
+                  type="email"
+                  value={email}
+                  autoComplete="email"
+                  placeholder="Enter admin email"
+                  disabled={isSubmitting || recoverySent}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setError("");
+                    setRecoverySent(false);
+                  }}
+                />
+              </div>
+
+              {error && (
+                <div className="admin-login-error">
+                  <AlertCircle size={17} />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {recoverySent && (
+                <div className="admin-login-success">
+                  <CheckCircle2 size={17} />
+                  <span>
+                    If this email belongs to an account,
+                    a password reset link has been sent.
+                  </span>
+                </div>
+              )}
+
+              {!recoverySent && (
+                <button
+                  type="submit"
+                  className="admin-login-submit"
+                  disabled={isSubmitting}
+                >
+                  <Send size={18} />
+                  {isSubmitting
+                    ? "Sending link..."
+                    : "Send Reset Link"}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="admin-login-secondary"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setRecoveryMode(false);
+                  setRecoverySent(false);
+                  setError("");
+                }}
+              >
+                <ArrowLeft size={16} />
+                Back to admin login
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit}>
             <label
               className="admin-login-label"
@@ -151,6 +296,7 @@ export default function AdminLogin() {
                 value={email}
                 autoComplete="username"
                 placeholder="Enter admin email"
+                disabled={isSubmitting}
                 onChange={(event) => {
                   setEmail(event.target.value);
                   setError("");
@@ -178,6 +324,7 @@ export default function AdminLogin() {
                 value={password}
                 autoComplete="current-password"
                 placeholder="Enter admin password"
+                disabled={isSubmitting}
                 onChange={(event) => {
                   setPassword(event.target.value);
                   setError("");
@@ -187,6 +334,7 @@ export default function AdminLogin() {
               <button
                 type="button"
                 className="admin-password-toggle"
+                disabled={isSubmitting}
                 onClick={() =>
                   setShowPassword(
                     (current) => !current
@@ -206,6 +354,21 @@ export default function AdminLogin() {
               </button>
             </div>
 
+            <div className="admin-login-actions">
+              <button
+                type="button"
+                className="admin-login-link"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setRecoveryMode(true);
+                  setRecoverySent(false);
+                  setError("");
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+
             {error && (
               <div className="admin-login-error">
                 <AlertCircle size={17} />
@@ -216,43 +379,43 @@ export default function AdminLogin() {
             <button
               type="submit"
               className="admin-login-submit"
+              disabled={isSubmitting}
             >
               <ShieldCheck size={19} />
-              Sign In to Admin Portal
+
+              {isSubmitting
+                ? "Signing in..."
+                : "Sign In to Admin Portal"}
             </button>
           </form>
+          )}
 
           <div className="admin-demo-credentials">
             <div>
-              <strong>Prototype credentials</strong>
+              <strong>
+                Secure administrator access
+              </strong>
+
               <span>
-                Use these details for the admin demo.
+                Only verified and active admin
+                accounts can access this portal.
               </span>
             </div>
 
             <div className="admin-demo-row">
-              <span>Email</span>
-              <code>{DEMO_ADMIN_EMAIL}</code>
+              <span>Authentication</span>
+              <code>Supabase Auth</code>
             </div>
 
             <div className="admin-demo-row">
-              <span>Password</span>
-              <code>{DEMO_ADMIN_PASSWORD}</code>
+              <span>Access level</span>
+              <code>Administrator only</code>
             </div>
-
-            <button
-              type="button"
-              className="admin-fill-demo-button"
-              onClick={fillDemoCredentials}
-            >
-              Fill Demo Credentials
-            </button>
           </div>
 
           <div className="admin-login-note">
-            Prototype only: authentication is stored
-            locally in this browser. Supabase Auth will
-            replace it during backend integration.
+            Authentication and sessions are securely
+            managed through Supabase.
           </div>
         </div>
       </section>

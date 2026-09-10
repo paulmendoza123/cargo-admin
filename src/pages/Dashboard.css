@@ -1,0 +1,139 @@
+.dashboard-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-refresh-button {
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: white;
+  color: var(--navy);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dashboard-refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dashboard-error-banner {
+  margin-bottom: 16px;
+  padding: 13px 15px;
+  border: 1px solid #fecaca;
+  border-radius: 15px;
+  background: #fef2f2;
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-error-banner > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dashboard-error-banner strong {
+  color: #991b1b;
+  font-size: 9px;
+}
+
+.dashboard-error-banner span {
+  color: #b91c1c;
+  font-size: 8px;
+}
+
+.dashboard-error-banner button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: white;
+  color: #b91c1c;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.system-online.offline {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.system-online.offline span {
+  background: var(--danger);
+}
+
+.dashboard-company-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dashboard-company-copy span {
+  color: #94a3b8;
+  font-size: 7px;
+}
+
+.dashboard-table-state,
+.dashboard-business-state {
+  min-height: 76px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 8px;
+}
+
+.dashboard-table-state.success {
+  color: #15803d;
+}
+
+.dashboard-business-state {
+  min-height: 110px;
+  border: 1px dashed var(--border);
+  border-radius: 15px;
+  background: #fbfcfd;
+}
+
+.business-mini-icon {
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.business-mini-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.business-mini-content .dashboard-business-code {
+  color: #94a3b8;
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.25px;
+}
+
+@media (max-width: 760px) {
+  .dashboard-heading-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .welcome-card {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+}
