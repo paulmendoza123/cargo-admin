@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
+import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
 
 type ApplicationStatus =
   | "Pending"
@@ -214,10 +215,7 @@ export default function Applications() {
     setReviewing,
   ] = useState(false);
 
-  const [
-    search,
-    setSearch,
-  ] = useState("");
+  const [search, setSearch] = useAdminPageSearch();
 
   const [
     filter,

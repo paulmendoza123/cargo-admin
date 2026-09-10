@@ -2,11 +2,13 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   Eye,
   EyeOff,
   LockKeyhole,
   Mail,
+  Send,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -17,6 +19,9 @@ import {
 import {
   useAdminAuth,
 } from "../contexts/AdminAuthContext";
+import {
+  requestAdminPasswordReset,
+} from "../adminAuth";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -40,6 +45,12 @@ export default function AdminLogin() {
     useState("");
 
   const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
+  const [recoveryMode, setRecoveryMode] =
+    useState(false);
+
+  const [recoverySent, setRecoverySent] =
     useState(false);
 
   if (loading) {
@@ -88,6 +99,34 @@ export default function AdminLogin() {
         signInError instanceof Error
           ? signInError.message
           : "Unable to sign in. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePasswordRecovery = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+    setError("");
+
+    if (!email.trim()) {
+      setError(
+        "Enter the administrator email address."
+      );
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await requestAdminPasswordReset(email);
+      setRecoverySent(true);
+    } catch (recoveryError) {
+      setError(
+        recoveryError instanceof Error
+          ? recoveryError.message
+          : "Unable to send the password reset email."
       );
     } finally {
       setIsSubmitting(false);
@@ -151,16 +190,95 @@ export default function AdminLogin() {
           </div>
 
           <div className="admin-login-eyebrow">
-            AUTHORIZED ACCESS
+            {recoveryMode
+              ? "ACCOUNT RECOVERY"
+              : "AUTHORIZED ACCESS"}
           </div>
 
-          <h2>Welcome back, Admin</h2>
+          <h2>
+            {recoveryMode
+              ? "Reset admin password"
+              : "Welcome back, Admin"}
+          </h2>
 
           <p className="admin-login-description">
-            Sign in to continue to the Cargo Track PH
-            administration dashboard.
+            {recoveryMode
+              ? "Enter the administrator email address and we’ll send a secure password reset link."
+              : "Sign in to continue to the Cargo Track PH administration dashboard."}
           </p>
 
+          {recoveryMode ? (
+            <form onSubmit={handlePasswordRecovery}>
+              <label
+                className="admin-login-label"
+                htmlFor="recovery-email"
+              >
+                Administrator email
+              </label>
+
+              <div className="admin-login-input-wrap">
+                <Mail size={18} />
+
+                <input
+                  id="recovery-email"
+                  type="email"
+                  value={email}
+                  autoComplete="email"
+                  placeholder="Enter admin email"
+                  disabled={isSubmitting || recoverySent}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setError("");
+                    setRecoverySent(false);
+                  }}
+                />
+              </div>
+
+              {error && (
+                <div className="admin-login-error">
+                  <AlertCircle size={17} />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {recoverySent && (
+                <div className="admin-login-success">
+                  <CheckCircle2 size={17} />
+                  <span>
+                    If this email belongs to an account,
+                    a password reset link has been sent.
+                  </span>
+                </div>
+              )}
+
+              {!recoverySent && (
+                <button
+                  type="submit"
+                  className="admin-login-submit"
+                  disabled={isSubmitting}
+                >
+                  <Send size={18} />
+                  {isSubmitting
+                    ? "Sending link..."
+                    : "Send Reset Link"}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="admin-login-secondary"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setRecoveryMode(false);
+                  setRecoverySent(false);
+                  setError("");
+                }}
+              >
+                <ArrowLeft size={16} />
+                Back to admin login
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit}>
             <label
               className="admin-login-label"
@@ -236,6 +354,21 @@ export default function AdminLogin() {
               </button>
             </div>
 
+            <div className="admin-login-actions">
+              <button
+                type="button"
+                className="admin-login-link"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setRecoveryMode(true);
+                  setRecoverySent(false);
+                  setError("");
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+
             {error && (
               <div className="admin-login-error">
                 <AlertCircle size={17} />
@@ -255,6 +388,7 @@ export default function AdminLogin() {
                 : "Sign In to Admin Portal"}
             </button>
           </form>
+          )}
 
           <div className="admin-demo-credentials">
             <div>

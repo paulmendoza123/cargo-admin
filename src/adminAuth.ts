@@ -75,19 +75,19 @@ export async function signInAdmin(
     });
 
   if (error) {
-  console.error(
-    "Supabase login error:",
-    error
-  );
+    console.error(
+      "Supabase login error:",
+      error
+    );
 
-  throw new Error(error.message);
-}
+    throw new Error(error.message);
+  }
 
-if (!data.user) {
-  throw new Error(
-    "Supabase did not return a user account."
-  );
-}
+  if (!data.user) {
+    throw new Error(
+      "Supabase did not return a user account."
+    );
+  }
 
   const admin =
     await getAdminSessionForUser(data.user);
@@ -101,6 +101,52 @@ if (!data.user) {
   }
 
   return admin;
+}
+
+export async function requestAdminPasswordReset(
+  email: string
+) {
+  const normalizedEmail =
+    email.trim().toLowerCase();
+
+  if (!normalizedEmail) {
+    throw new Error(
+      "Enter the administrator email address."
+    );
+  }
+
+  const redirectTo = new URL(
+    "/reset-password",
+    window.location.origin
+  ).toString();
+
+  const { error } =
+    await supabase.auth.resetPasswordForEmail(
+      normalizedEmail,
+      { redirectTo }
+    );
+
+  if (error) {
+    throw new Error(
+      "Unable to send the password reset email. Please try again."
+    );
+  }
+}
+
+export async function updateAdminPassword(
+  password: string
+) {
+  const { error } =
+    await supabase.auth.updateUser({
+      password,
+    });
+
+  if (error) {
+    throw new Error(
+      error.message ||
+        "Unable to update the administrator password."
+    );
+  }
 }
 
 export async function getAdminSession():

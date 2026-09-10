@@ -45,6 +45,7 @@ import {
   saveSponsorshipPackage,
   setSponsoredPlacementEnabled,
 } from "../lib/sponsorships";
+import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
 import type {
   AdminSponsorshipRequest,
   SponsorshipCheckout,
@@ -184,7 +185,7 @@ export default function Sponsored() {
     useState("");
 
   const [search, setSearch] =
-    useState("");
+    useAdminPageSearch();
   const [filter, setFilter] =
     useState<RequestFilter>("All");
   const [selectedId, setSelectedId] =

@@ -27,6 +27,7 @@ import {
   loadAdminBusinessStatusHistory,
   setAdminBusinessStatus,
 } from "../lib/businesses";
+import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
 import type {
   AdminBusiness,
   BusinessStatus,
@@ -75,7 +76,7 @@ export default function Businesses() {
   const [pageError, setPageError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useAdminPageSearch();
   const [selectedFilter, setSelectedFilter] =
     useState<Filter>("All");
   const [selectedBusiness, setSelectedBusiness] =

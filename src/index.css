@@ -2192,6 +2192,141 @@ tbody tr:last-child td {
   line-height: 1.6;
 }
 
+.user-activity-section {
+  margin-top: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.user-activity-heading {
+  min-height: 52px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e8eef2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.user-activity-heading > div {
+  color: var(--blue);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-activity-heading h4 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 10px;
+}
+
+.user-activity-heading button {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.user-activity-heading button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.user-activity-empty {
+  min-height: 76px;
+  padding: 18px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 9px;
+  text-align: center;
+}
+
+.user-activity-empty.error {
+  color: var(--danger);
+}
+
+.user-activity-list {
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.user-activity-item {
+  padding: 13px 14px;
+  border-bottom: 1px solid #edf2f5;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.user-activity-item:last-child {
+  border-bottom: 0;
+}
+
+.user-activity-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+
+.user-activity-dot.active,
+.user-activity-dot.verified {
+  background: var(--success);
+}
+
+.user-activity-dot.suspended,
+.user-activity-dot.rejected {
+  background: var(--danger);
+}
+
+.user-activity-item > div {
+  min-width: 0;
+}
+
+.user-activity-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.user-activity-item strong {
+  color: var(--navy);
+  font-size: 9px;
+}
+
+.user-activity-item-top span {
+  color: var(--blue);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.user-activity-item p {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.user-activity-item small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 7px;
+}
+
 .disable-user-button,
 .activate-user-button {
   min-height: 43px;
@@ -2582,6 +2717,26 @@ tbody tr:last-child td {
   color: var(--blue);
 }
 
+.admin-login-actions {
+  margin-top: 9px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-login-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.admin-login-link:hover {
+  text-decoration: underline;
+}
+
 .admin-login-error {
   margin-top: 12px;
   padding: 10px 11px;
@@ -2597,6 +2752,24 @@ tbody tr:last-child td {
 }
 
 .admin-login-error svg {
+  flex-shrink: 0;
+}
+
+.admin-login-success {
+  margin-top: 12px;
+  padding: 10px 11px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: #f0fdf4;
+  color: #166534;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.admin-login-success svg {
   flex-shrink: 0;
 }
 
@@ -2622,6 +2795,37 @@ tbody tr:last-child td {
 .admin-login-submit:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 25px rgba(245, 184, 46, 0.34);
+}
+
+.admin-login-submit:disabled,
+.admin-login-secondary:disabled,
+.admin-login-link:disabled,
+.admin-password-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
+.admin-login-secondary {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 11px;
+  border: 1px solid #bfd8e3;
+  border-radius: 13px;
+  background: var(--white);
+  color: var(--blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.admin-login-secondary:hover {
+  border-color: var(--blue);
+  background: var(--light-blue);
 }
 
 .admin-demo-credentials {
@@ -3058,5 +3262,11 @@ tbody tr:last-child td {
 
   .identity-review-actions button {
     width: 100%;
+  }
+
+  .user-activity-item-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 }

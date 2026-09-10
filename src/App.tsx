@@ -11,6 +11,7 @@ import {
   useAdminAuth,
 } from "./contexts/AdminAuthContext";
 import AdminLogin from "./pages/AdminLogin";
+import AdminResetPassword from "./pages/AdminResetPassword";
 import Applications from "./pages/Applications";
 import Businesses from "./pages/Businesses";
 import Dashboard from "./pages/Dashboard";
@@ -81,6 +82,11 @@ export default function App() {
           <Route
             path="/login"
             element={<AdminLogin />}
+          />
+
+          <Route
+            path="/reset-password"
+            element={<AdminResetPassword />}
           />
 
           <Route

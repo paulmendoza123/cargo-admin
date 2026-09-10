@@ -13,6 +13,7 @@ import {
   Clock3,
   Eye,
   FileCheck2,
+  History,
   Image as ImageIcon,
   Mail,
   Phone,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
+import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
 
 type UserRole = "Customer" | "Business";
 type UserStatus = "Active" | "Disabled";
@@ -58,30 +60,43 @@ type User = {
   identityDocument?: IdentityDocument;
 };
 
-type ProfileRow = {
-  id: string;
+type AdminUserRow = {
+  user_id: string;
   email: string | null;
   full_name: string;
   phone: string | null;
-  role: "customer" | "business";
+  user_role: "customer" | "business";
   account_status: "active" | "suspended";
   created_at: string;
+  business_name: string | null;
+  identity_document_id: string | null;
+  identity_id_type: string | null;
+  identity_storage_path: string | null;
+  identity_verification_status: string | null;
+  identity_submitted_at: string | null;
+  identity_reviewed_at: string | null;
+  identity_rejection_reason: string | null;
 };
 
-type BusinessRow = {
-  owner_id: string;
-  name: string;
+type UserActivityRow = {
+  activity_id: string;
+  activity_type: "account" | "identity";
+  old_status: string | null;
+  new_status: string;
+  note: string | null;
+  changed_at: string;
+  changed_by: string | null;
+  changed_by_name: string | null;
 };
 
-type IdentityDocumentRow = {
+type UserActivity = {
   id: string;
-  customer_id: string;
-  id_type: string;
-  storage_path: string;
-  verification_status: string;
-  created_at: string;
-  reviewed_at: string | null;
-  rejection_reason: string | null;
+  type: "Account" | "Identity Verification";
+  oldStatus?: string;
+  newStatus: string;
+  note?: string;
+  changedAt: string;
+  changedBy: string;
 };
 
 const CUSTOMER_ID_BUCKET = "customer-ids";
@@ -122,6 +137,49 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
+function formatDateTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown time";
+  }
+
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatStatus(value?: string | null) {
+  if (!value) {
+    return "Initial";
+  }
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 function normalizeVerificationStatus(
   value?: string | null
 ): VerificationStatus {
@@ -141,7 +199,7 @@ export default function Users() {
   const [users, setUsers] =
     useState<User[]>([]);
   const [search, setSearch] =
-    useState("");
+    useAdminPageSearch();
   const [selectedRole, setSelectedRole] =
     useState<RoleFilter>("All");
   const [selectedUser, setSelectedUser] =
@@ -166,128 +224,69 @@ export default function Users() {
     useState("");
   const [rejectionReason, setRejectionReason] =
     useState("");
+  const [activity, setActivity] =
+    useState<UserActivity[]>([]);
+  const [activityLoading, setActivityLoading] =
+    useState(false);
+  const [activityError, setActivityError] =
+    useState("");
 
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
       setPageError("");
 
-      const [
-        profileResult,
-        businessResult,
-        identityResult,
-      ] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select(
-            `
-              id,
-              email,
-              full_name,
-              phone,
-              role,
-              account_status,
-              created_at
-            `
-          )
-          .in("role", ["customer", "business"])
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("businesses")
-          .select("owner_id, name"),
-
-        supabase
-          .from("customer_identity_documents")
-          .select(
-            `
-              id,
-              customer_id,
-              id_type,
-              storage_path,
-              verification_status,
-              created_at,
-              reviewed_at,
-              rejection_reason
-            `
-          )
-          .order("created_at", { ascending: false }),
-      ]);
-
-      if (profileResult.error) {
-        throw profileResult.error;
-      }
-
-      if (businessResult.error) {
-        throw businessResult.error;
-      }
-
-      if (identityResult.error) {
-        throw identityResult.error;
-      }
-
-      const profiles =
-        (profileResult.data ?? []) as ProfileRow[];
-      const businesses =
-        (businessResult.data ?? []) as BusinessRow[];
-      const identityDocuments =
-        (identityResult.data ?? []) as IdentityDocumentRow[];
-
-      const businessNamesByOwner = new Map(
-        businesses.map((business) => [
-          business.owner_id,
-          business.name,
-        ])
+      const { data, error } = await supabase.rpc(
+        "get_admin_users"
       );
 
-      const identityByCustomer =
-        new Map<string, IdentityDocument>();
+      if (error) {
+        throw error;
+      }
 
-      identityDocuments.forEach((document) => {
-        if (identityByCustomer.has(document.customer_id)) {
-          return;
-        }
+      const rows = (data ?? []) as AdminUserRow[];
 
-        identityByCustomer.set(document.customer_id, {
-          id: document.id,
-          idType: document.id_type,
-          storagePath: document.storage_path,
-          verificationStatus:
-            normalizeVerificationStatus(
-              document.verification_status
-            ),
-          submittedAt: document.created_at,
-          reviewedAt: document.reviewed_at ?? undefined,
-          rejectionReason:
-            document.rejection_reason ?? undefined,
-        });
-      });
-
-      const mappedUsers: User[] = profiles.map(
-        (profile) => ({
-          id: profile.id,
-          displayId: createDisplayId(profile.id),
+      const mappedUsers: User[] = rows.map(
+        (row) => ({
+          id: row.user_id,
+          displayId: createDisplayId(row.user_id),
           name:
-            profile.full_name ||
-            profile.email?.split("@")[0] ||
+            row.full_name ||
+            row.email?.split("@")[0] ||
             "CargoTrackPH User",
           email:
-            profile.email || "No email provided",
-          phone: profile.phone || "Not provided",
+            row.email || "No email provided",
+          phone: row.phone || "Not provided",
           role:
-            profile.role === "business"
+            row.user_role === "business"
               ? "Business"
               : "Customer",
           status:
-            profile.account_status === "active"
+            row.account_status === "active"
               ? "Active"
               : "Disabled",
-          joined: formatDate(profile.created_at),
-          businessName:
-            businessNamesByOwner.get(profile.id),
+          joined: formatDate(row.created_at),
+          businessName: row.business_name ?? undefined,
           identityDocument:
-            profile.role === "customer"
-              ? identityByCustomer.get(profile.id)
+            row.user_role === "customer" &&
+            row.identity_document_id &&
+            row.identity_id_type &&
+            row.identity_storage_path &&
+            row.identity_submitted_at
+              ? {
+                  id: row.identity_document_id,
+                  idType: row.identity_id_type,
+                  storagePath: row.identity_storage_path,
+                  verificationStatus:
+                    normalizeVerificationStatus(
+                      row.identity_verification_status
+                    ),
+                  submittedAt: row.identity_submitted_at,
+                  reviewedAt:
+                    row.identity_reviewed_at ?? undefined,
+                  rejectionReason:
+                    row.identity_rejection_reason ?? undefined,
+                }
               : undefined,
         })
       );
@@ -297,14 +296,64 @@ export default function Users() {
       console.error("Unable to load users:", error);
 
       setPageError(
-        error instanceof Error
-          ? error.message
-          : "Unable to load user accounts."
+        getErrorMessage(error, "Unable to load user accounts.")
       );
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadUserActivity = useCallback(
+    async (userId: string) => {
+      try {
+        setActivityLoading(true);
+        setActivityError("");
+
+        const { data, error } = await supabase.rpc(
+          "get_admin_user_activity",
+          { requested_user_id: userId }
+        );
+
+        if (error) {
+          throw error;
+        }
+
+        const rows = (data ?? []) as UserActivityRow[];
+
+        setActivity(
+          rows.map((row) => ({
+            id: row.activity_id,
+            type:
+              row.activity_type === "identity"
+                ? "Identity Verification"
+                : "Account",
+            oldStatus: row.old_status ?? undefined,
+            newStatus: row.new_status,
+            note: row.note ?? undefined,
+            changedAt: row.changed_at,
+            changedBy:
+              row.changed_by_name || "Administrator",
+          }))
+        );
+      } catch (error) {
+        console.error(
+          "Unable to load user activity:",
+          error
+        );
+
+        setActivity([]);
+        setActivityError(
+          getErrorMessage(
+            error,
+            "Unable to load administrative activity."
+          )
+        );
+      } finally {
+        setActivityLoading(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const initialLoad =
@@ -371,9 +420,10 @@ export default function Users() {
               );
 
               setIdentityPreviewError(
-                error instanceof Error
-                  ? error.message
-                  : "Unable to load the private ID image."
+                getErrorMessage(
+                  error,
+                  "Unable to load the private ID image."
+                )
               );
             })
             .finally(() => {
@@ -435,10 +485,13 @@ export default function Users() {
   const openUserDetails = (user: User) => {
     setStatusError("");
     setVerificationError("");
+    setActivity([]);
+    setActivityError("");
     setRejectionReason(
       user.identityDocument?.rejectionReason ?? ""
     );
     setSelectedUser(user);
+    void loadUserActivity(user.id);
   };
 
   const closeUserDetails = () => {
@@ -448,6 +501,8 @@ export default function Users() {
 
     setStatusError("");
     setVerificationError("");
+    setActivity([]);
+    setActivityError("");
     setSelectedUser(null);
   };
 
@@ -477,10 +532,10 @@ export default function Users() {
         status === "Active" ? "active" : "suspended";
 
       const { error } = await supabase.rpc(
-        "set_user_account_status",
+        "set_admin_managed_user_status",
         {
-          requested_user_id: selectedUser.id,
-          requested_status: databaseStatus,
+          target_user_id: selectedUser.id,
+          target_status: databaseStatus,
         }
       );
 
@@ -504,13 +559,15 @@ export default function Users() {
       window.dispatchEvent(
         new Event("cargo:users-changed")
       );
+      await loadUserActivity(selectedUser.id);
     } catch (error) {
       console.error("Unable to update account:", error);
 
       setStatusError(
-        error instanceof Error
-          ? error.message
-          : "Unable to update the account status."
+        getErrorMessage(
+          error,
+          "Unable to update the account status."
+        )
       );
     } finally {
       setIsUpdatingStatus(false);
@@ -603,6 +660,7 @@ export default function Users() {
       window.dispatchEvent(
         new Event("cargo:users-changed")
       );
+      await loadUserActivity(selectedUser.id);
     } catch (error) {
       console.error(
         "Unable to review identity document:",
@@ -610,9 +668,10 @@ export default function Users() {
       );
 
       setVerificationError(
-        error instanceof Error
-          ? error.message
-          : "Unable to update the verification status."
+        getErrorMessage(
+          error,
+          "Unable to update the verification status."
+        )
       );
     } finally {
       setIsReviewingIdentity(false);
@@ -1153,6 +1212,74 @@ export default function Users() {
                   </div>
                 </div>
               </div>
+
+              <section className="user-activity-section">
+                <div className="user-activity-heading">
+                  <div>
+                    <History size={18} />
+                    <h4>Administrative activity</h4>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void loadUserActivity(selectedUser.id)
+                    }
+                    disabled={activityLoading}
+                  >
+                    <RefreshCw
+                      size={14}
+                      className={activityLoading ? "spin" : ""}
+                    />
+                    Refresh
+                  </button>
+                </div>
+
+                {activityError ? (
+                  <div className="user-activity-empty error">
+                    <AlertCircle size={18} />
+                    <span>{activityError}</span>
+                  </div>
+                ) : activityLoading ? (
+                  <div className="user-activity-empty">
+                    Loading administrative activity...
+                  </div>
+                ) : activity.length === 0 ? (
+                  <div className="user-activity-empty">
+                    No administrative changes recorded yet.
+                  </div>
+                ) : (
+                  <div className="user-activity-list">
+                    {activity.map((entry) => (
+                      <div
+                        className="user-activity-item"
+                        key={entry.id}
+                      >
+                        <span
+                          className={`user-activity-dot ${entry.newStatus.toLowerCase()}`}
+                        />
+
+                        <div>
+                          <div className="user-activity-item-top">
+                            <strong>{entry.type}</strong>
+                            <span>
+                              {formatStatus(entry.oldStatus)} →{" "}
+                              {formatStatus(entry.newStatus)}
+                            </span>
+                          </div>
+
+                          {entry.note && <p>{entry.note}</p>}
+
+                          <small>
+                            {entry.changedBy} ·{" "}
+                            {formatDateTime(entry.changedAt)}
+                          </small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
 
               {statusError && (
                 <div className="admin-login-error">
