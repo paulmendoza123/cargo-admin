@@ -620,10 +620,8 @@ export default function Businesses() {
               </div>
 
               <div className="business-permission-note">
-                Account status changes are performed through an
-                administrator-only Supabase function and recorded in the
-                audit history. Rates and services remain managed by the
-                business owner.
+                Account status changes are recorded in the audit history.
+                Rates and services remain managed by the business owner.
               </div>
 
               {statusAction && (

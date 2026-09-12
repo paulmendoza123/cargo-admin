@@ -390,33 +390,6 @@ export default function AdminLogin() {
           </form>
           )}
 
-          <div className="admin-demo-credentials">
-            <div>
-              <strong>
-                Secure administrator access
-              </strong>
-
-              <span>
-                Only verified and active admin
-                accounts can access this portal.
-              </span>
-            </div>
-
-            <div className="admin-demo-row">
-              <span>Authentication</span>
-              <code>Supabase Auth</code>
-            </div>
-
-            <div className="admin-demo-row">
-              <span>Access level</span>
-              <code>Administrator only</code>
-            </div>
-          </div>
-
-          <div className="admin-login-note">
-            Authentication and sessions are securely
-            managed through Supabase.
-          </div>
         </div>
       </section>
     </div>

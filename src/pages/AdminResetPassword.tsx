@@ -117,9 +117,8 @@ export default function AdminResetPassword() {
           </h1>
 
           <p>
-            Password recovery is completed through a
-            time-limited Supabase Auth session and is
-            available only to active administrator accounts.
+            Use the secure recovery link sent to your
+            administrator email to create a new password.
           </p>
         </div>
 

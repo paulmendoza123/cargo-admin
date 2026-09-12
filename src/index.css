@@ -1059,6 +1059,105 @@ tbody tr:last-child td {
   padding: 30px;
 }
 
+.admin-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 27, 44, 0.64);
+  backdrop-filter: blur(3px);
+}
+
+.admin-confirm-dialog {
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid #dbe5eb;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+  text-align: center;
+}
+
+.admin-confirm-icon {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 15px;
+  border-radius: 17px;
+  display: grid;
+  place-items: center;
+  color: #1f6f94;
+  background: #eaf5fa;
+}
+
+.admin-confirm-icon.danger {
+  color: #dc2626;
+  background: #fff0f0;
+}
+
+.admin-confirm-dialog h2 {
+  margin: 0;
+  color: #0b3654;
+  font-size: 20px;
+}
+
+.admin-confirm-dialog p {
+  margin: 10px 0 22px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.admin-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.admin-confirm-actions button {
+  min-height: 46px;
+  border: 1px solid #d7e2e9;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #ffffff;
+  color: #385269;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-confirm-actions button.primary {
+  border-color: #123f60;
+  background: #123f60;
+  color: #ffffff;
+}
+
+.admin-confirm-actions button.danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.admin-confirm-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+@media (max-width: 520px) {
+  .admin-confirm-dialog {
+    padding: 22px 18px;
+  }
+
+  .admin-confirm-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .application-modal {
   width: min(850px, 100%);
   max-height: 90vh;
@@ -2826,76 +2925,6 @@ tbody tr:last-child td {
 .admin-login-secondary:hover {
   border-color: var(--blue);
   background: var(--light-blue);
-}
-
-.admin-demo-credentials {
-  margin-top: 18px;
-  padding: 14px;
-  border: 1px solid #d7e7ee;
-  border-radius: 15px;
-  background: var(--light-blue);
-}
-
-.admin-demo-credentials > div:first-child {
-  display: flex;
-  flex-direction: column;
-}
-
-.admin-demo-credentials strong {
-  color: var(--navy);
-  font-size: 10px;
-}
-
-.admin-demo-credentials > div:first-child span {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.admin-demo-row {
-  margin-top: 9px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.admin-demo-row > span {
-  color: var(--muted);
-  font-size: 8px;
-  font-weight: 700;
-}
-
-.admin-demo-row code {
-  color: var(--navy);
-  font-family: Inter, Arial, sans-serif;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.admin-fill-demo-button {
-  width: 100%;
-  min-height: 36px;
-  margin-top: 11px;
-  border: 1px solid #bfd8e3;
-  border-radius: 11px;
-  background: var(--white);
-  color: var(--blue);
-  cursor: pointer;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.admin-fill-demo-button:hover {
-  border-color: var(--blue);
-}
-
-.admin-login-note {
-  margin-top: 14px;
-  color: var(--muted);
-  font-size: 8px;
-  line-height: 1.55;
-  text-align: center;
 }
 
 @media (max-width: 950px) {

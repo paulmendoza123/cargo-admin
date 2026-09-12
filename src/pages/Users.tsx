@@ -28,6 +28,7 @@ import {
 
 import { supabase } from "../lib/supabase";
 import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 type UserRole = "Customer" | "Business";
 type UserStatus = "Active" | "Disabled";
@@ -98,6 +99,16 @@ type UserActivity = {
   changedAt: string;
   changedBy: string;
 };
+
+type PendingUserAction =
+  | {
+      kind: "status";
+      status: UserStatus;
+    }
+  | {
+      kind: "identity";
+      status: "Verified" | "Rejected";
+    };
 
 const CUSTOMER_ID_BUCKET = "customer-ids";
 
@@ -230,6 +241,8 @@ export default function Users() {
     useState(false);
   const [activityError, setActivityError] =
     useState("");
+  const [pendingAction, setPendingAction] =
+    useState<PendingUserAction | null>(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -499,6 +512,7 @@ export default function Users() {
       return;
     }
 
+    setPendingAction(null);
     setStatusError("");
     setVerificationError("");
     setActivity([]);
@@ -510,17 +524,6 @@ export default function Users() {
     status: UserStatus
   ) => {
     if (!selectedUser) {
-      return;
-    }
-
-    const actionLabel =
-      status === "Active" ? "activate" : "disable";
-
-    const confirmed = window.confirm(
-      `Are you sure you want to ${actionLabel} ${selectedUser.name}'s account?`
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -589,17 +592,6 @@ export default function Users() {
       setVerificationError(
         "Enter a rejection reason before rejecting the ID."
       );
-      return;
-    }
-
-    const actionLabel =
-      nextStatus === "Verified" ? "approve" : "reject";
-
-    const confirmed = window.confirm(
-      `Are you sure you want to ${actionLabel} ${selectedUser.name}'s submitted ID?`
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -677,6 +669,65 @@ export default function Users() {
       setIsReviewingIdentity(false);
     }
   };
+
+  const beginIdentityReview = (
+    status: "Verified" | "Rejected"
+  ) => {
+    if (status === "Rejected" && !rejectionReason.trim()) {
+      setVerificationError(
+        "Enter a rejection reason before rejecting the ID."
+      );
+      return;
+    }
+
+    setVerificationError("");
+    setPendingAction({ kind: "identity", status });
+  };
+
+  const confirmPendingAction = async () => {
+    const action = pendingAction;
+
+    if (!action) {
+      return;
+    }
+
+    setPendingAction(null);
+
+    if (action.kind === "status") {
+      await updateUserStatus(action.status);
+      return;
+    }
+
+    await reviewIdentityDocument(action.status);
+  };
+
+  const pendingActionCopy = (() => {
+    if (!selectedUser || !pendingAction) {
+      return null;
+    }
+
+    if (pendingAction.kind === "status") {
+      const disabling = pendingAction.status === "Disabled";
+      return {
+        title: disabling ? "Disable this account?" : "Activate this account?",
+        description: disabling
+          ? `${selectedUser.name} will lose access until an administrator activates the account again.`
+          : `${selectedUser.name} will regain access to Cargo Track PH.`,
+        confirmLabel: disabling ? "Disable account" : "Activate account",
+        tone: disabling ? ("danger" as const) : ("primary" as const),
+      };
+    }
+
+    const rejecting = pendingAction.status === "Rejected";
+    return {
+      title: rejecting ? "Reject this submitted ID?" : "Approve this submitted ID?",
+      description: rejecting
+        ? `The rejection reason will be shown to ${selectedUser.name}.`
+        : `${selectedUser.name}'s identity verification will be marked as approved.`,
+      confirmLabel: rejecting ? "Reject ID" : "Approve ID",
+      tone: rejecting ? ("danger" as const) : ("primary" as const),
+    };
+  })();
 
   return (
     <>
@@ -821,7 +872,7 @@ export default function Users() {
                       <RefreshCw size={30} />
                       <strong>Loading users...</strong>
                       <span>
-                        Retrieving accounts from Supabase.
+                        Retrieving customer and business accounts.
                       </span>
                     </div>
                   </td>
@@ -1158,7 +1209,7 @@ export default function Users() {
                           className="identity-reject-button"
                           disabled={isReviewingIdentity}
                           onClick={() =>
-                            void reviewIdentityDocument("Rejected")
+                            beginIdentityReview("Rejected")
                           }
                         >
                           <XCircle size={18} />
@@ -1172,7 +1223,7 @@ export default function Users() {
                           className="identity-approve-button"
                           disabled={isReviewingIdentity}
                           onClick={() =>
-                            void reviewIdentityDocument("Verified")
+                            beginIdentityReview("Verified")
                           }
                         >
                           <FileCheck2 size={18} />
@@ -1304,7 +1355,10 @@ export default function Users() {
                     isUpdatingStatus || isReviewingIdentity
                   }
                   onClick={() =>
-                    void updateUserStatus("Disabled")
+                    setPendingAction({
+                      kind: "status",
+                      status: "Disabled",
+                    })
                   }
                 >
                   <Ban size={18} />
@@ -1320,7 +1374,10 @@ export default function Users() {
                     isUpdatingStatus || isReviewingIdentity
                   }
                   onClick={() =>
-                    void updateUserStatus("Active")
+                    setPendingAction({
+                      kind: "status",
+                      status: "Active",
+                    })
                   }
                 >
                   <CheckCircle2 size={18} />
@@ -1333,6 +1390,17 @@ export default function Users() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingActionCopy)}
+        title={pendingActionCopy?.title ?? "Confirm action"}
+        description={pendingActionCopy?.description ?? ""}
+        confirmLabel={pendingActionCopy?.confirmLabel ?? "Confirm"}
+        tone={pendingActionCopy?.tone}
+        busy={isUpdatingStatus || isReviewingIdentity}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => void confirmPendingAction()}
+      />
     </>
   );
 }

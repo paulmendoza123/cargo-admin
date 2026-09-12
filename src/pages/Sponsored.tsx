@@ -46,6 +46,7 @@ import {
   setSponsoredPlacementEnabled,
 } from "../lib/sponsorships";
 import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
+import ConfirmDialog from "../components/ConfirmDialog";
 import type {
   AdminSponsorshipRequest,
   SponsorshipCheckout,
@@ -196,6 +197,8 @@ export default function Sponsored() {
     useState(false);
   const [approvalError, setApprovalError] =
     useState("");
+  const [placementChangeRequest, setPlacementChangeRequest] =
+    useState<AdminSponsorshipRequest | null>(null);
 
   const [rejectVisible, setRejectVisible] =
     useState(false);
@@ -550,14 +553,7 @@ export default function Sponsored() {
 
     const nextEnabled =
       !request.placementIsEnabled;
-    const confirmed =
-      window.confirm(
-        `${nextEnabled ? "Enable" : "Disable"} the premium placement for ${request.businessName}?`
-      );
-
-    if (!confirmed) {
-      return;
-    }
+    setPlacementChangeRequest(null);
 
     try {
       setWorking(true);
@@ -797,14 +793,6 @@ export default function Sponsored() {
               Premium Listing data
             </strong>
             <span>{pageError}</span>
-            <small>
-              Run{" "}
-              <code>
-                supabase/admin-sponsorship-workflow.sql
-              </code>{" "}
-              in the same Supabase
-              project, then refresh.
-            </small>
           </div>
         </div>
       )}
@@ -1642,7 +1630,7 @@ export default function Sponsored() {
                         : "disabled"
                     }
                     onClick={() =>
-                      void togglePlacement(
+                      setPlacementChangeRequest(
                         selectedRequest
                       )
                     }
@@ -1838,7 +1826,6 @@ export default function Sponsored() {
                     </p>
                     <h2 id="reject-title">
                       Reject premium request
-                      request
                     </h2>
                   </div>
                 </div>
@@ -2156,6 +2143,37 @@ export default function Sponsored() {
             </section>
           </div>
         )}
+
+      <ConfirmDialog
+        open={Boolean(placementChangeRequest)}
+        title={
+          placementChangeRequest?.placementIsEnabled
+            ? "Disable this premium placement?"
+            : "Enable this premium placement?"
+        }
+        description={
+          placementChangeRequest?.placementIsEnabled
+            ? `${placementChangeRequest.businessName} will be hidden from premium results until it is enabled again.`
+            : `${placementChangeRequest?.businessName ?? "This business"} will be eligible for premium visibility.`
+        }
+        confirmLabel={
+          placementChangeRequest?.placementIsEnabled
+            ? "Disable placement"
+            : "Enable placement"
+        }
+        tone={
+          placementChangeRequest?.placementIsEnabled
+            ? "danger"
+            : "primary"
+        }
+        busy={working}
+        onCancel={() => setPlacementChangeRequest(null)}
+        onConfirm={() => {
+          if (placementChangeRequest) {
+            void togglePlacement(placementChangeRequest);
+          }
+        }}
+      />
     </div>
   );
 }

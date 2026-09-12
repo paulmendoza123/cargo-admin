@@ -8,7 +8,6 @@ import type {
   CSSProperties,
 } from "react";
 import {
-  AlertTriangle,
   BadgeCheck,
   Building2,
   Check,
@@ -32,6 +31,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
 import RegistrationFeeSettings from "../components/RegistrationFeeSettings";
+import ConfirmDialog from "../components/ConfirmDialog";
 import {
   approveApplicationDocuments,
   approveRegistrationPayment,
@@ -272,6 +272,8 @@ export default function Applications() {
     sendingApprovalEmail,
     setSendingApprovalEmail,
   ] = useState(false);
+  const [approvalConfirmOpen, setApprovalConfirmOpen] =
+    useState(false);
 
   const loadApplications =
     useCallback(async () => {
@@ -644,15 +646,7 @@ export default function Applications() {
 
       const payment = selectedApplication.registrationPayment;
       const approvingPayment = payment?.status === "pending";
-      const confirmed = window.confirm(
-        approvingPayment
-          ? `Approve the ${registrationPeso(payment.amount)} registration payment for ${selectedApplication.businessName}?\n\nThis will activate the business and make it available to the owner.`
-          : `Approve the submitted documents for ${selectedApplication.businessName}?\n\nThe business will be asked to pay the configured one-time registration fee before activation.`,
-      );
-
-      if (!confirmed) {
-        return;
-      }
+      setApprovalConfirmOpen(false);
 
       setReviewing(true);
       try {
@@ -709,6 +703,27 @@ export default function Applications() {
         setReviewing(false);
       }
     };
+
+  const approvalConfirmation = (() => {
+    if (!selectedApplication || selectedApplication.rawStatus !== "pending") {
+      return null;
+    }
+
+    const payment = selectedApplication.registrationPayment;
+    const approvingPayment = payment?.status === "pending";
+
+    return {
+      title: approvingPayment
+        ? "Approve payment and activate business?"
+        : "Approve submitted documents?",
+      description: approvingPayment
+        ? `${registrationPeso(payment.amount)} will be approved and ${selectedApplication.businessName} will become active.`
+        : `${selectedApplication.businessName} will be asked to complete the configured one-time registration fee.`,
+      confirmLabel: approvingPayment
+        ? "Approve & activate"
+        : "Approve documents",
+    };
+  })();
 
   const sendSelectedApprovalEmail = async () => {
     if (
@@ -1066,18 +1081,6 @@ export default function Applications() {
             </div>
           </div>
 
-          <div
-            style={
-              styles.liveReviewBadge
-            }
-          >
-            <span
-              style={
-                styles.liveDot
-              }
-            />
-            Live Supabase Data
-          </div>
         </div>
 
         <div
@@ -1192,41 +1195,6 @@ export default function Applications() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* PROTOTYPE NOTICE */}
-      <div
-        style={
-          styles.prototypeNotice
-        }
-      >
-        <AlertTriangle
-          size={20}
-          color={
-            COLORS.warning
-          }
-        />
-
-        <div>
-          <div
-            style={
-              styles.prototypeNoticeTitle
-            }
-          >
-            {pageError
-              ? "Supabase connection error"
-              : "Connected to Supabase"}
-          </div>
-
-          <div
-            style={
-              styles.prototypeNoticeText
-            }
-          >
-            {pageError ||
-              "Applications and review decisions are stored in the shared backend. Approved applications automatically create an active business record, while rejection reasons become visible to the business owner."}
-          </div>
-        </div>
       </div>
 
       {/* DETAILS MODAL */}
@@ -1688,7 +1656,7 @@ export default function Applications() {
                           : 1,
                     }}
                     onClick={
-                      approveSelected
+                      () => setApprovalConfirmOpen(true)
                     }
                     disabled={
                       reviewing ||
@@ -1854,6 +1822,16 @@ export default function Applications() {
             </div>
           </div>
         )}
+
+      <ConfirmDialog
+        open={approvalConfirmOpen && Boolean(approvalConfirmation)}
+        title={approvalConfirmation?.title ?? "Confirm approval"}
+        description={approvalConfirmation?.description ?? ""}
+        confirmLabel={approvalConfirmation?.confirmLabel ?? "Approve"}
+        busy={reviewing}
+        onCancel={() => setApprovalConfirmOpen(false)}
+        onConfirm={() => void approveSelected()}
+      />
     </div>
   );
 }
@@ -2513,28 +2491,6 @@ const styles: Record<
     fontSize: 10,
   },
 
-  liveReviewBadge: {
-    minHeight: 30,
-    borderRadius: 15,
-    padding: "0 10px",
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    background:
-      "#F0FDF4",
-    color: COLORS.success,
-    fontSize: 9,
-    fontWeight: 900,
-  },
-
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 999,
-    background:
-      COLORS.success,
-  },
-
   tableScroll: {
     overflowX: "auto",
   },
@@ -2696,33 +2652,6 @@ const styles: Record<
   emptyText: {
     color: COLORS.muted,
     fontSize: 10,
-  },
-
-  prototypeNotice: {
-    marginTop: 16,
-    borderRadius: 16,
-    border:
-      "1px solid #F3D2AD",
-    background:
-      "#FFF7ED",
-    padding: 13,
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 9,
-  },
-
-  prototypeNoticeTitle: {
-    color: "#9A5A35",
-    fontSize: 10,
-    fontWeight: 900,
-  },
-
-  prototypeNoticeText: {
-    marginTop: 3,
-    maxWidth: 850,
-    color: "#9A5A35",
-    fontSize: 9,
-    lineHeight: 1.55,
   },
 
   modalBackdrop: {
