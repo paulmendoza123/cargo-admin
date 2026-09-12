@@ -26,14 +26,14 @@ order, Vercel variables, and deployment checklist, follow
 [ADMIN_PRODUCTION_DEPLOYMENT.md](ADMIN_PRODUCTION_DEPLOYMENT.md). The portal does
 not use or expose a Supabase service-role key.
 
-## Sponsorship workflow
+## Registration fee and Premium Listings
 
-The Sponsored Listings page reads live requests submitted by the Expo business
+The Premium Listings page reads live requests submitted by the Expo business
 app. It supports:
 
 - payment receipt review through short-lived signed URLs;
 - approve/reject actions through administrator-only RPCs;
-- sponsored placement enable/disable controls;
+- premium placement enable/disable controls;
 - editable package name, duration, price, description, and availability;
 - editable GCash checkout settings;
 - live pending-request badge in the sidebar.
@@ -41,6 +41,11 @@ app. It supports:
 Run [supabase/admin-sponsorship-workflow.sql](supabase/admin-sponsorship-workflow.sql)
 once in the same Supabase project before opening the page. The mobile
 `sponsorship-mobile-workflow.sql` migration must already be installed.
+
+Run [supabase/business-registration-and-premium.sql](supabase/business-registration-and-premium.sql)
+for the one-time business registration fee, payment verification gate, and the
+Weekly/Monthly/Annual Premium defaults. Follow
+[REGISTRATION_FEE_AND_PREMIUM_SETUP.md](REGISTRATION_FEE_AND_PREMIUM_SETUP.md).
 
 Existing requests retain their submitted package name, duration, and price
 snapshots when package settings are edited.
@@ -66,7 +71,7 @@ test checklist and security behavior.
 
 The Dashboard and shared top-bar review queue now use live Supabase data. The
 dashboard shows real platform totals, pending applications, recently approved
-businesses, booking totals, sponsorship reviews, and customer ID reviews. The
+businesses, booking totals, Premium Listing reviews, and customer ID reviews. The
 Applications sidebar badge is live, and each bell item opens the matching admin
 review page.
 
@@ -78,9 +83,9 @@ checklist.
 ## Global admin search
 
 The top-bar search is connected to live Supabase records across Businesses,
-Applications, Users, and Sponsored Listings. Selecting a result opens the
+Applications, Users, and Premium Listings. Selecting a result opens the
 correct page and carries the result code or email into that page's existing
-search filter. Broad sponsorship matches are grouped per business, while exact
+search filter. Broad Premium Listing matches are grouped per business, while exact
 request-code and payment-reference searches still return individual requests.
 
 Run [supabase/admin-global-search.sql](supabase/admin-global-search.sql) once

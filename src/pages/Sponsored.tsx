@@ -244,7 +244,7 @@ export default function Sponsored() {
       setPageError(
         error instanceof Error
           ? error.message
-          : "Unable to load sponsorship management."
+          : "Unable to load Premium Listings management."
       );
     } finally {
       setLoading(false);
@@ -467,7 +467,7 @@ export default function Sponsored() {
 
     const confirmed =
       window.confirm(
-        `Approve ${selectedRequest.requestCode} for ${selectedRequest.businessName}?\n\nThe ${selectedRequest.durationDays}-day sponsored placement starts after approval.`
+        `Approve ${selectedRequest.requestCode} for ${selectedRequest.businessName}?\n\nThe ${selectedRequest.durationDays}-day premium placement starts after approval.`
       );
 
     if (!confirmed) {
@@ -481,13 +481,13 @@ export default function Sponsored() {
       );
       await refreshRequests();
       showNotice(
-        "Sponsorship approved and placement activated."
+        "Premium Listing approved and placement activated."
       );
     } catch (error) {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Unable to approve the sponsorship request."
+          : "Unable to approve the Premium Listing request."
       );
     } finally {
       setWorking(false);
@@ -524,13 +524,13 @@ export default function Sponsored() {
       setRejectVisible(false);
       setRejectionReason("");
       showNotice(
-        "Sponsorship request rejected. The business can see the reason."
+        "Premium Listing request rejected. The business can see the reason."
       );
     } catch (error) {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Unable to reject the sponsorship request."
+          : "Unable to reject the Premium Listing request."
       );
     } finally {
       setWorking(false);
@@ -551,7 +551,7 @@ export default function Sponsored() {
       !request.placementIsEnabled;
     const confirmed =
       window.confirm(
-        `${nextEnabled ? "Enable" : "Disable"} the sponsored placement for ${request.businessName}?`
+        `${nextEnabled ? "Enable" : "Disable"} the premium placement for ${request.businessName}?`
       );
 
     if (!confirmed) {
@@ -566,13 +566,13 @@ export default function Sponsored() {
       );
       await refreshRequests();
       showNotice(
-        `Sponsored placement ${nextEnabled ? "enabled" : "disabled"}.`
+        `Premium placement ${nextEnabled ? "enabled" : "disabled"}.`
       );
     } catch (error) {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Unable to update the sponsored placement."
+          : "Unable to update the premium placement."
       );
     } finally {
       setWorking(false);
@@ -658,13 +658,13 @@ export default function Sponsored() {
       setEditingPackageId(null);
       setPackageForm(null);
       showNotice(
-        "Sponsorship package updated. New requests will use the new values."
+        "Premium package updated. New requests will use the new values."
       );
     } catch (error) {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Unable to save the sponsorship package."
+          : "Unable to save the premium package."
       );
     } finally {
       setWorking(false);
@@ -720,7 +720,7 @@ export default function Sponsored() {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Unable to save the sponsorship checkout."
+          : "Unable to save the premium checkout."
       );
     } finally {
       setWorking(false);
@@ -734,11 +734,11 @@ export default function Sponsored() {
           <p className="sa-eyebrow">
             REVENUE MANAGEMENT
           </p>
-          <h1>Sponsored Listings</h1>
+          <h1>Premium Listings</h1>
           <p>
             Review payment proofs,
             manage placements, and
-            configure sponsorship
+            configure Premium Listings
             packages.
           </p>
         </div>
@@ -793,7 +793,7 @@ export default function Sponsored() {
           <div>
             <strong>
               Unable to load live
-              sponsorship data
+              Premium Listing data
             </strong>
             <span>{pageError}</span>
             <small>
@@ -811,7 +811,7 @@ export default function Sponsored() {
       <div
         className="sa-tabs"
         role="tablist"
-        aria-label="Sponsorship management"
+        aria-label="Premium Listings management"
       >
         <button
           type="button"
@@ -860,7 +860,7 @@ export default function Sponsored() {
         <>
           <section
             className="sa-stats"
-            aria-label="Sponsorship summary"
+            aria-label="Premium Listings summary"
           >
             <SummaryCard
               label="Total requests"
@@ -881,7 +881,7 @@ export default function Sponsored() {
               tone="gold"
             />
             <SummaryCard
-              label="Active sponsored"
+              label="Active premium"
               value={counts.active}
               helper="Currently promoted"
               icon={
@@ -906,7 +906,7 @@ export default function Sponsored() {
             <div className="sa-panel-header">
               <div>
                 <h2>
-                  Sponsorship requests
+                  Premium Listing requests
                 </h2>
                 <p>
                   Live records submitted
@@ -938,13 +938,13 @@ export default function Sponsored() {
                     )
                   }
                   placeholder="Search business, request, or reference..."
-                  aria-label="Search sponsorship requests"
+                  aria-label="Search Premium Listing requests"
                 />
               </label>
 
               <div
                 className="sa-filters"
-                aria-label="Filter sponsorship requests"
+                aria-label="Filter Premium Listing requests"
               >
                 {FILTERS.map((item) => (
                   <button
@@ -973,13 +973,13 @@ export default function Sponsored() {
             </div>
 
             {loading ? (
-              <LoadingState label="Loading sponsorship requests..." />
+              <LoadingState label="Loading Premium Listing requests..." />
             ) : filteredRequests.length ===
               0 ? (
               <EmptyState
                 title={
                   requests.length === 0
-                    ? "No sponsorship requests yet"
+                    ? "No Premium Listing requests yet"
                     : "No matching requests"
                 }
                 description={
@@ -1093,7 +1093,7 @@ export default function Sponsored() {
             <div className="sa-panel-header">
               <div>
                 <h2>
-                  Sponsorship packages
+                  Premium packages
                 </h2>
                 <p>
                   Edit the offers shown
@@ -1177,7 +1177,7 @@ export default function Sponsored() {
                 <p>
                   Payment details
                   displayed during
-                  sponsorship submission.
+                  Premium Listing submission.
                 </p>
               </div>
               <span
@@ -1327,7 +1327,7 @@ export default function Sponsored() {
               />
               <div>
                 <strong>
-                  Accept sponsorship
+                  Accept premium request
                   submissions
                 </strong>
                 <small>
@@ -1612,7 +1612,7 @@ export default function Sponsored() {
                   </strong>
                   <small>
                     Approval activates the
-                    sponsored placement
+                    premium placement
                     immediately.
                   </small>
                 </div>
@@ -1625,12 +1625,12 @@ export default function Sponsored() {
                 <div className="sa-placement-control">
                   <div>
                     <strong>
-                      Sponsored placement
+                      Premium placement
                     </strong>
                     <span>
                       {selectedRequest.placementIsEnabled
                         ? "Enabled and eligible for customer visibility"
-                        : "Disabled and hidden from sponsored results"}
+                        : "Disabled and hidden from premium results"}
                     </span>
                   </div>
                   <button
@@ -1736,7 +1736,7 @@ export default function Sponsored() {
                       }
                     </p>
                     <h2 id="reject-title">
-                      Reject sponsorship
+                      Reject premium request
                       request
                     </h2>
                   </div>
@@ -1856,7 +1856,7 @@ export default function Sponsored() {
                       PACKAGE SETTINGS
                     </p>
                     <h2 id="package-edit-title">
-                      Edit sponsorship
+                      Edit premium package
                       package
                     </h2>
                   </div>

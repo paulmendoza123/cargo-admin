@@ -14,6 +14,7 @@ import {
   Check,
   CheckCircle2,
   Clock3,
+  CreditCard,
   Eye,
   FileCheck2,
   FileText,
@@ -30,9 +31,21 @@ import {
 
 import { supabase } from "../lib/supabase";
 import { useAdminPageSearch } from "../hooks/useAdminPageSearch";
+import RegistrationFeeSettings from "../components/RegistrationFeeSettings";
+import {
+  approveApplicationDocuments,
+  approveRegistrationPayment,
+  createRegistrationProofUrl,
+  loadRegistrationPayments,
+  registrationPeso,
+  rejectRegistrationPayment,
+} from "../lib/registrationFees";
+import type { RegistrationPayment } from "../lib/registrationFees";
 
 type ApplicationStatus =
   | "Pending"
+  | "Payment Required"
+  | "Payment Review"
   | "Approved"
   | "Rejected";
 
@@ -59,9 +72,13 @@ type BusinessApplication = {
   branchLongitude: number;
 
   status: ApplicationStatus;
+  rawStatus: string;
   submittedAt: string;
   reviewedAt?: string;
   rejectionReason?: string;
+  documentsApprovedAt?: string;
+  registrationFeeDueAt?: string;
+  registrationPayment?: RegistrationPayment;
 
   documents: BusinessDocument[];
 
@@ -101,6 +118,8 @@ type BusinessApplicationRow = {
   submitted_at: string;
   reviewed_at: string | null;
   rejection_reason: string | null;
+  documents_approved_at: string | null;
+  registration_fee_due_at: string | null;
 };
 
 type BusinessDocumentRow = {
@@ -122,7 +141,9 @@ const DOCUMENT_LABELS:
   };
 
 function normalizeStatus(
-  value: string
+  value: string,
+  documentsApprovedAt?: string | null,
+  paymentStatus?: RegistrationPayment["status"],
 ): ApplicationStatus {
   if (value === "approved") {
     return "Approved";
@@ -130,6 +151,10 @@ function normalizeStatus(
 
   if (value === "rejected") {
     return "Rejected";
+  }
+
+  if (documentsApprovedAt) {
+    return paymentStatus === "pending" ? "Payment Review" : "Payment Required";
   }
 
   return "Pending";
@@ -271,7 +296,9 @@ export default function Applications() {
             status,
             submitted_at,
             reviewed_at,
-            rejection_reason
+            rejection_reason,
+            documents_approved_at,
+            registration_fee_due_at
           `)
           .order("submitted_at", {
             ascending: false,
@@ -325,9 +352,19 @@ export default function Applications() {
               BusinessDocumentRow[];
         }
 
+        const registrationPayments = await loadRegistrationPayments();
+        const registrationPaymentByApplication = new Map(
+          registrationPayments.map((payment) => [payment.applicationId, payment]),
+        );
+
         const mappedApplications =
           typedApplications.map(
-            (application) => ({
+            (application) => {
+              const registrationPayment = registrationPaymentByApplication.get(
+                application.id,
+              );
+
+              return ({
               id: application.id,
               applicationCode:
                 application.application_code,
@@ -353,10 +390,12 @@ export default function Applications() {
                   application.branch_longitude ||
                     0
                 ),
-              status:
-                normalizeStatus(
-                  application.status
-                ),
+              status: normalizeStatus(
+                application.status,
+                application.documents_approved_at,
+                registrationPayment?.status,
+              ),
+              rawStatus: application.status,
               submittedAt:
                 application.submitted_at,
               reviewedAt:
@@ -365,6 +404,11 @@ export default function Applications() {
               rejectionReason:
                 application.rejection_reason ||
                 undefined,
+              documentsApprovedAt:
+                application.documents_approved_at || undefined,
+              registrationFeeDueAt:
+                application.registration_fee_due_at || undefined,
+              registrationPayment,
               documents:
                 documentRows
                   .filter(
@@ -401,7 +445,8 @@ export default function Applications() {
                 getPublicAssetUrl(
                   application.cover_path
                 ),
-            })
+            });
+            }
           );
 
         setApplications(
@@ -502,8 +547,9 @@ export default function Applications() {
         pending:
           applications.filter(
             (item) =>
-              item.status ===
-              "Pending"
+              item.status === "Pending" ||
+              item.status === "Payment Required" ||
+              item.status === "Payment Review"
           ).length,
         approved:
           applications.filter(
@@ -530,8 +576,7 @@ export default function Applications() {
     ) => {
       if (
         !selectedApplication ||
-        selectedApplication.status !==
-          "Pending" ||
+        selectedApplication.rawStatus !== "pending" ||
         reviewing
       ) {
         return false;
@@ -586,38 +631,53 @@ export default function Applications() {
     async () => {
       if (
         !selectedApplication ||
-        selectedApplication.status !==
-          "Pending"
+        selectedApplication.rawStatus !== "pending"
       ) {
         return;
       }
 
-      const confirmed =
-        window.confirm(
-          `Approve ${selectedApplication.businessName}?\n\nAn active business record will be created and the application will become visible to the owner.`
-        );
+      const payment = selectedApplication.registrationPayment;
+      const approvingPayment = payment?.status === "pending";
+      const confirmed = window.confirm(
+        approvingPayment
+          ? `Approve the ${registrationPeso(payment.amount)} registration payment for ${selectedApplication.businessName}?\n\nThis will activate the business and make it available to the owner.`
+          : `Approve the submitted documents for ${selectedApplication.businessName}?\n\nThe business will be asked to pay the configured one-time registration fee before activation.`,
+      );
 
       if (!confirmed) {
         return;
       }
 
-      const success =
-        await reviewSelected(
-          "approve"
-        );
+      setReviewing(true);
+      try {
+        if (approvingPayment) {
+          await approveRegistrationPayment(payment.id);
+          window.alert("Registration payment approved and business activated.");
+        } else if (!selectedApplication.documentsApprovedAt) {
+          const result = await approveApplicationDocuments(selectedApplication.id);
+          window.alert(
+            result === "approved"
+              ? "Business application approved. The registration fee is currently disabled."
+              : "Documents approved. The applicant can now submit the registration fee.",
+          );
+        } else {
+          window.alert("Waiting for the applicant to submit a registration payment receipt.");
+          return;
+        }
 
-      if (success) {
-        window.alert(
-          "Business application approved successfully."
-        );
+        await loadApplications();
+        window.dispatchEvent(new Event("cargo:applications-changed"));
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Unable to complete approval.");
+      } finally {
+        setReviewing(false);
       }
     };
 
   const openReject = () => {
-    if (
-      !selectedApplication ||
-      selectedApplication.status !==
-        "Pending"
+      if (
+        !selectedApplication ||
+        selectedApplication.rawStatus !== "pending"
     ) {
       return;
     }
@@ -645,11 +705,25 @@ export default function Applications() {
         return;
       }
 
-      const success =
-        await reviewSelected(
-          "reject",
-          rejectionReason
-        );
+      let success = false;
+      if (selectedApplication.registrationPayment?.status === "pending") {
+        setReviewing(true);
+        try {
+          await rejectRegistrationPayment(
+            selectedApplication.registrationPayment.id,
+            rejectionReason,
+          );
+          await loadApplications();
+          window.dispatchEvent(new Event("cargo:applications-changed"));
+          success = true;
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Unable to reject payment.");
+        } finally {
+          setReviewing(false);
+        }
+      } else {
+        success = await reviewSelected("reject", rejectionReason);
+      }
 
       if (!success) {
         return;
@@ -659,7 +733,9 @@ export default function Applications() {
       setRejectionReason("");
 
       window.alert(
-        "Business application rejected. The reason is now visible to the business owner."
+        selectedApplication.registrationPayment?.status === "pending"
+          ? "Registration payment rejected. The applicant can correct and resubmit it."
+          : "Business application rejected. The reason is now visible to the business owner."
       );
     };
 
@@ -698,6 +774,23 @@ export default function Applications() {
         "noopener,noreferrer"
       );
     };
+
+  const viewRegistrationProof = async () => {
+    const path = selectedApplication?.registrationPayment?.paymentProofPath;
+    if (!path) {
+      window.alert("No registration payment receipt has been submitted yet.");
+      return;
+    }
+
+    try {
+      const signedUrl = await createRegistrationProofUrl(path);
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Unable to open payment receipt.",
+      );
+    }
+  };
   return (
     <div style={styles.page}>
       {/* PAGE HEADER */}
@@ -756,6 +849,8 @@ export default function Applications() {
         </button>
       </div>
 
+      <RegistrationFeeSettings />
+
       {/* STATS */}
       <div
         style={
@@ -770,7 +865,7 @@ export default function Applications() {
         />
 
         <StatCard
-          label="Pending Review"
+          label="Awaiting Action"
           value={
             counts.pending
           }
@@ -845,6 +940,8 @@ export default function Applications() {
             [
               "All",
               "Pending",
+              "Payment Required",
+              "Payment Review",
               "Approved",
               "Rejected",
             ] as const
@@ -1369,6 +1466,63 @@ export default function Applications() {
                 )}
               </div>
 
+              {selectedApplication.documentsApprovedAt ? (
+                <>
+                  <SectionTitle
+                    title="Registration Payment"
+                    subtitle="One-time fee verification required before business activation"
+                  />
+                  <div style={styles.descriptionCard}>
+                    <div style={styles.descriptionLabel}>PAYMENT STATUS</div>
+                    <div style={styles.descriptionText}>
+                      {selectedApplication.registrationPayment?.status === "pending"
+                        ? "Receipt submitted — ready for admin review"
+                        : selectedApplication.registrationPayment?.status === "approved"
+                        ? "Payment approved"
+                        : selectedApplication.registrationPayment?.status === "rejected"
+                        ? "Payment rejected — waiting for resubmission"
+                        : "Waiting for the applicant to pay"}
+                    </div>
+                    <div style={{ ...styles.infoGrid, marginTop: 14 }}>
+                      <InfoCard
+                        icon={CreditCard}
+                        label="Locked Amount"
+                        value={registrationPeso(
+                          selectedApplication.registrationPayment?.amount || 0,
+                        )}
+                      />
+                      <InfoCard
+                        icon={FileText}
+                        label="Reference"
+                        value={
+                          selectedApplication.registrationPayment?.paymentReference ||
+                          "Not submitted"
+                        }
+                      />
+                    </div>
+                    {selectedApplication.registrationPayment?.rejectionReason ? (
+                      <div style={{ ...styles.rejectionCard, marginTop: 14 }}>
+                        <XCircle size={20} />
+                        <div>
+                          <div style={styles.rejectionTitle}>Payment rejection reason</div>
+                          <div style={styles.rejectionText}>
+                            {selectedApplication.registrationPayment.rejectionReason}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    {selectedApplication.registrationPayment?.paymentProofPath ? (
+                      <button
+                        style={{ ...styles.documentViewButton, marginTop: 14 }}
+                        onClick={() => void viewRegistrationProof()}
+                      >
+                        <Eye size={15} /> View Payment Receipt
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
               <SectionTitle
                 title="Public Profile Media"
                 subtitle="Logo and cover prepared for the customer-facing company profile"
@@ -1437,8 +1591,7 @@ export default function Applications() {
                 styles.modalFooter
               }
             >
-              {selectedApplication.status ===
-              "Pending" ? (
+              {selectedApplication.rawStatus === "pending" ? (
                 <>
                   <button
                     style={{
@@ -1456,7 +1609,9 @@ export default function Applications() {
                     <XCircle
                       size={18}
                     />
-                    Reject
+                    {selectedApplication.registrationPayment?.status === "pending"
+                      ? "Reject Payment"
+                      : "Reject Application"}
                   </button>
 
                   <button
@@ -1470,14 +1625,22 @@ export default function Applications() {
                     onClick={
                       approveSelected
                     }
-                    disabled={reviewing}
+                    disabled={
+                      reviewing ||
+                      (Boolean(selectedApplication.documentsApprovedAt) &&
+                        selectedApplication.registrationPayment?.status !== "pending")
+                    }
                   >
                     <BadgeCheck
                       size={18}
                     />
                     {reviewing
                       ? "Saving..."
-                      : "Approve Business"}
+                      : selectedApplication.registrationPayment?.status === "pending"
+                      ? "Approve Payment & Activate"
+                      : selectedApplication.documentsApprovedAt
+                      ? "Waiting for Payment"
+                      : "Approve Documents"}
                   </button>
                 </>
               ) : (
@@ -1527,7 +1690,9 @@ export default function Applications() {
                   styles.rejectTitle
                 }
               >
-                Reject Application
+                {selectedApplication.registrationPayment?.status === "pending"
+                  ? "Reject Registration Payment"
+                  : "Reject Application"}
               </div>
 
               <div
@@ -1535,10 +1700,9 @@ export default function Applications() {
                   styles.rejectText
                 }
               >
-                Explain what the
-                business needs to
-                correct before
-                resubmitting.
+                {selectedApplication.registrationPayment?.status === "pending"
+                  ? "Explain what is wrong with the submitted receipt so the applicant can correct it."
+                  : "Explain what the business needs to correct before resubmitting."}
               </div>
 
               <label
@@ -1600,6 +1764,8 @@ export default function Applications() {
                 >
                   {reviewing
                     ? "Saving..."
+                    : selectedApplication.registrationPayment?.status === "pending"
+                    ? "Reject Payment"
                     : "Reject Application"}
                 </button>
               </div>

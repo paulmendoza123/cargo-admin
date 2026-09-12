@@ -321,7 +321,7 @@ export default function Dashboard() {
             to="/sponsored"
             tone="yellow"
             icon={<Megaphone size={21} />}
-            title="Review Sponsorships"
+            title="Review Premium Listings"
             subtitle={`${summary?.pendingSponsorships ?? 0} payment reviews pending`}
           />
           <QuickAction

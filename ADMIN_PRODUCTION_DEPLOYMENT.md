@@ -11,9 +11,10 @@ Install the mobile application's base tables and migrations first, then run:
 
 1. `supabase/admin-business-management.sql`
 2. `supabase/admin-sponsorship-workflow.sql`
-3. `supabase/admin-users-management.sql`
-4. `supabase/admin-dashboard.sql`
-5. `supabase/admin-global-search.sql`
+3. `supabase/business-registration-and-premium.sql`
+4. `supabase/admin-users-management.sql`
+5. `supabase/admin-dashboard.sql`
+6. `supabase/admin-global-search.sql`
 
 Each admin function checks `public.is_admin()`, uses a fixed search path, revokes
 access from `public` and `anon`, and grants execution only to authenticated users.
@@ -55,10 +56,8 @@ Do not add `SUPABASE_SERVICE_ROLE_KEY` or any secret admin key to this frontend.
 
 ## 5. Deploy the correct branch
 
-The production-ready Supabase implementation is currently on the
-`customer-verification` branch. The older `main` branch still contains the demo
-login. Review and merge `customer-verification` into `main`, push it to GitHub,
-and confirm that Vercel deploys the new `main` commit.
+Commit the tested release to its feature branch, merge it into `main`, push
+`main` to GitHub, and confirm that Vercel deploys the new `main` commit.
 
 ## 6. Production smoke test
 
@@ -68,6 +67,7 @@ and confirm that Vercel deploys the new `main` commit.
 - The new password works and the used recovery session is signed out.
 - Pending business applications and customer IDs load and can be reviewed.
 - Business suspension/reactivation and user suspension/reactivation are audited.
-- Sponsorship payment receipts use short-lived links and review actions persist.
+- Registration and Premium Listing receipts use short-lived links and review actions persist.
+- Document approval requires the configured registration fee before activation.
 - Dashboard totals, notification queue, and global search return live records.
 - No service-role key appears in browser source, Vercel client variables, or Git.

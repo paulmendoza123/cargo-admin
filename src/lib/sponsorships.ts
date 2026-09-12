@@ -190,7 +190,7 @@ export async function loadAdminSponsorshipRequests() {
     throw new Error(
       errorMessage(
         error,
-        "Unable to load sponsorship requests."
+        "Unable to load Premium Listing requests."
       )
     );
   }
@@ -236,7 +236,7 @@ export async function loadAdminSponsorshipPackages() {
     throw new Error(
       errorMessage(
         error,
-        "Unable to load sponsorship packages."
+        "Unable to load premium packages."
       )
     );
   }
@@ -263,7 +263,7 @@ export async function loadAdminSponsorshipCheckout() {
     throw new Error(
       errorMessage(
         error,
-        "Unable to load sponsorship checkout settings."
+        "Unable to load premium checkout settings."
       )
     );
   }
@@ -300,7 +300,7 @@ export async function approveSponsorshipRequest(
     throw new Error(
       errorMessage(
         error,
-        "Unable to approve the sponsorship request."
+        "Unable to approve the Premium Listing request."
       )
     );
   }
@@ -322,7 +322,7 @@ export async function rejectSponsorshipRequest(
     throw new Error(
       errorMessage(
         error,
-        "Unable to reject the sponsorship request."
+        "Unable to reject the Premium Listing request."
       )
     );
   }
@@ -344,7 +344,7 @@ export async function setSponsoredPlacementEnabled(
     throw new Error(
       errorMessage(
         error,
-        "Unable to update the sponsored placement."
+        "Unable to update the premium placement."
       )
     );
   }
@@ -370,7 +370,7 @@ export async function saveSponsorshipPackage(
     throw new Error(
       errorMessage(
         error,
-        "Unable to save the sponsorship package."
+        "Unable to save the premium package."
       )
     );
   }
@@ -395,7 +395,7 @@ export async function saveSponsorshipCheckout(
     throw new Error(
       errorMessage(
         error,
-        "Unable to save the sponsorship checkout."
+        "Unable to save the premium checkout."
       )
     );
   }

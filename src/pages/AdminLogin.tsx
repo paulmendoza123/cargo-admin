@@ -156,7 +156,7 @@ export default function AdminLogin() {
           <p>
             Review cargo business applications,
             manage users and companies, and verify
-            sponsored placement requests from one
+            premium placement requests from one
             secure workspace.
           </p>
 
@@ -173,7 +173,7 @@ export default function AdminLogin() {
 
             <div>
               <CheckCircle2 size={17} />
-              Sponsored payment verification
+              Premium Listing payment verification
             </div>
           </div>
         </div>

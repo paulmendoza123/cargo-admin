@@ -57,7 +57,7 @@ const navItems = [
     icon: BriefcaseBusiness,
   },
   {
-    label: "Sponsored Listings",
+    label: "Premium Listings",
     path: "/sponsored",
     icon: Megaphone,
   },
@@ -360,7 +360,7 @@ export default function AdminLayout() {
                 )}
 
                 {item.label ===
-                  "Sponsored Listings" &&
+                  "Premium Listings" &&
                   pendingSponsorships > 0 && (
                   <span className="nav-badge">
                     {pendingSponsorships}
@@ -498,7 +498,11 @@ export default function AdminLayout() {
                           <span className="admin-search-result-copy">
                             <span>
                               <strong>{result.title}</strong>
-                              <small>{result.type}</small>
+                              <small>
+                                {result.type === "Sponsorship"
+                                  ? "Premium Listing"
+                                  : result.type}
+                              </small>
                             </span>
                             <span>{result.subtitle}</span>
                             <b>{result.code}</b>
@@ -571,7 +575,7 @@ export default function AdminLayout() {
                       {pendingSponsorships > 0 && (
                         <NotificationItem
                           icon={<Megaphone size={18} />}
-                          title="Sponsorship payments"
+                          title="Premium Listing payments"
                           detail={`${pendingSponsorships} waiting for verification`}
                           count={pendingSponsorships}
                           onClick={() => openNotificationTarget("/sponsored")}
