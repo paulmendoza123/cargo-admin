@@ -192,6 +192,10 @@ export default function Sponsored() {
     useState<string | null>(null);
   const [paymentReviewed, setPaymentReviewed] =
     useState(false);
+  const [approveVisible, setApproveVisible] =
+    useState(false);
+  const [approvalError, setApprovalError] =
+    useState("");
 
   const [rejectVisible, setRejectVisible] =
     useState(false);
@@ -298,6 +302,8 @@ export default function Sponsored() {
   ) => {
     setSelectedId(requestId);
     setPaymentReviewed(false);
+    setApproveVisible(false);
+    setApprovalError("");
     setRejectVisible(false);
     setRejectionReason("");
   };
@@ -305,6 +311,8 @@ export default function Sponsored() {
   const closeRequest = () => {
     setSelectedId(null);
     setPaymentReviewed(false);
+    setApproveVisible(false);
+    setApprovalError("");
     setRejectVisible(false);
     setRejectionReason("");
   };
@@ -465,26 +473,19 @@ export default function Sponsored() {
       return;
     }
 
-    const confirmed =
-      window.confirm(
-        `Approve ${selectedRequest.requestCode} for ${selectedRequest.businessName}?\n\nThe ${selectedRequest.durationDays}-day premium placement starts after approval.`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
     try {
       setWorking(true);
+      setApprovalError("");
       await approveSponsorshipRequest(
         selectedRequest.id
       );
       await refreshRequests();
+      setApproveVisible(false);
       showNotice(
         "Premium Listing approved and placement activated."
       );
     } catch (error) {
-      window.alert(
+      setApprovalError(
         error instanceof Error
           ? error.message
           : "Unable to approve the Premium Listing request."
@@ -1683,9 +1684,10 @@ export default function Sponsored() {
                   <button
                     type="button"
                     className="sa-primary-button"
-                    onClick={() =>
-                      void approveSelected()
-                    }
+                    onClick={() => {
+                      setApprovalError("");
+                      setApproveVisible(true);
+                    }}
                     disabled={
                       !paymentReviewed ||
                       working
@@ -1709,6 +1711,105 @@ export default function Sponsored() {
           </section>
         </div>
       )}
+
+      {approveVisible &&
+        selectedRequest && (
+          <div
+            className="sa-modal-overlay sa-modal-overlay--top"
+            role="presentation"
+            onMouseDown={() => {
+              if (!working) {
+                setApproveVisible(false);
+                setApprovalError("");
+              }
+            }}
+          >
+            <section
+              className="sa-modal sa-small-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sponsorship-approve-title"
+              onMouseDown={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <header className="sa-modal-header">
+                <div className="sa-modal-title-row">
+                  <span className="sa-modal-icon">
+                    <BadgeCheck size={21} />
+                  </span>
+                  <div>
+                    <p>FINAL CONFIRMATION</p>
+                    <h2 id="sponsorship-approve-title">
+                      Activate Premium Listing?
+                    </h2>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="sa-close"
+                  aria-label="Close approval confirmation"
+                  disabled={working}
+                  onClick={() => {
+                    setApproveVisible(false);
+                    setApprovalError("");
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </header>
+
+              <div className="sa-small-modal-body">
+                <p>
+                  Approve <strong>{selectedRequest.requestCode}</strong> for{" "}
+                  <strong>{selectedRequest.businessName}</strong>? The{" "}
+                  {selectedRequest.durationDays}-day premium placement will
+                  start immediately after approval.
+                </p>
+
+                {approvalError && (
+                  <div
+                    className="sa-notice sa-notice--error"
+                    role="alert"
+                  >
+                    <AlertCircle size={18} />
+                    <span>{approvalError}</span>
+                  </div>
+                )}
+              </div>
+
+              <footer className="sa-modal-actions">
+                <button
+                  type="button"
+                  className="sa-secondary-button"
+                  disabled={working}
+                  onClick={() => {
+                    setApproveVisible(false);
+                    setApprovalError("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="sa-primary-button"
+                  disabled={working}
+                  onClick={() => void approveSelected()}
+                >
+                  {working ? (
+                    <Loader2
+                      size={17}
+                      className="sa-spin"
+                    />
+                  ) : (
+                    <CheckCircle2 size={17} />
+                  )}
+                  Confirm & activate
+                </button>
+              </footer>
+            </section>
+          </div>
+        )}
 
       {rejectVisible &&
         selectedRequest && (
