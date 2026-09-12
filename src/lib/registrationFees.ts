@@ -138,6 +138,37 @@ export async function approveRegistrationPayment(paymentId: string) {
   if (error) throw new Error(error.message);
 }
 
+export type BusinessApprovalEmailResult = {
+  status: "sent" | "already_sent";
+  messageId?: string;
+};
+
+export async function sendBusinessApprovalEmail(applicationId: string) {
+  const { data, error } = await supabase.functions.invoke(
+    "send-business-approval-email",
+    { body: { applicationId } },
+  );
+
+  if (error) {
+    throw new Error(
+      messageOf(error, "Unable to send the business approval email."),
+    );
+  }
+
+  if (
+    !data ||
+    (data.status !== "sent" && data.status !== "already_sent")
+  ) {
+    throw new Error(
+      typeof data?.error === "string"
+        ? data.error
+        : "The email provider returned an unexpected response.",
+    );
+  }
+
+  return data as BusinessApprovalEmailResult;
+}
+
 export async function rejectRegistrationPayment(paymentId: string, reason: string) {
   const { error } = await supabase.rpc(
     "reject_business_registration_payment",

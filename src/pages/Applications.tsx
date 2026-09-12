@@ -39,6 +39,7 @@ import {
   loadRegistrationPayments,
   registrationPeso,
   rejectRegistrationPayment,
+  sendBusinessApprovalEmail,
 } from "../lib/registrationFees";
 import type { RegistrationPayment } from "../lib/registrationFees";
 
@@ -266,6 +267,11 @@ export default function Applications() {
     rejectionReason,
     setRejectionReason,
   ] = useState("");
+
+  const [
+    sendingApprovalEmail,
+    setSendingApprovalEmail,
+  ] = useState(false);
 
   const loadApplications =
     useCallback(async () => {
@@ -652,14 +658,44 @@ export default function Applications() {
       try {
         if (approvingPayment) {
           await approveRegistrationPayment(payment.id);
-          window.alert("Registration payment approved and business activated.");
+          try {
+            const emailResult = await sendBusinessApprovalEmail(
+              selectedApplication.id,
+            );
+            window.alert(
+              emailResult.status === "already_sent"
+                ? "Registration payment approved and business activated. The approval email had already been sent."
+                : "Registration payment approved, business activated, and approval email sent.",
+            );
+          } catch (emailError) {
+            console.error("Unable to send business approval email:", emailError);
+            window.alert(
+              "Registration payment approved and business activated, but the approval email could not be sent. Open the approved application and use Send approval email to retry.",
+            );
+          }
         } else if (!selectedApplication.documentsApprovedAt) {
           const result = await approveApplicationDocuments(selectedApplication.id);
-          window.alert(
-            result === "approved"
-              ? "Business application approved. The registration fee is currently disabled."
-              : "Documents approved. The applicant can now submit the registration fee.",
-          );
+          if (result === "approved") {
+            try {
+              const emailResult = await sendBusinessApprovalEmail(
+                selectedApplication.id,
+              );
+              window.alert(
+                emailResult.status === "already_sent"
+                  ? "Business application approved. The approval email had already been sent."
+                  : "Business application approved and approval email sent.",
+              );
+            } catch (emailError) {
+              console.error("Unable to send business approval email:", emailError);
+              window.alert(
+                "Business application approved, but the approval email could not be sent. Open the approved application and use Send approval email to retry.",
+              );
+            }
+          } else {
+            window.alert(
+              "Documents approved. The applicant can now submit the registration fee.",
+            );
+          }
         } else {
           window.alert("Waiting for the applicant to submit a registration payment receipt.");
           return;
@@ -673,6 +709,35 @@ export default function Applications() {
         setReviewing(false);
       }
     };
+
+  const sendSelectedApprovalEmail = async () => {
+    if (
+      !selectedApplication ||
+      selectedApplication.rawStatus !== "approved" ||
+      sendingApprovalEmail
+    ) {
+      return;
+    }
+
+    setSendingApprovalEmail(true);
+    try {
+      const result = await sendBusinessApprovalEmail(selectedApplication.id);
+      window.alert(
+        result.status === "already_sent"
+          ? "The approval email has already been sent."
+          : "Business approval email sent.",
+      );
+    } catch (error) {
+      console.error("Unable to send business approval email:", error);
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to send the business approval email.",
+      );
+    } finally {
+      setSendingApprovalEmail(false);
+    }
+  };
 
   const openReject = () => {
       if (
@@ -1644,18 +1709,35 @@ export default function Applications() {
                   </button>
                 </>
               ) : (
-                <button
-                  style={
-                    styles.cancelButton
-                  }
-                  onClick={() =>
-                    setSelectedId(
-                      null
-                    )
-                  }
-                >
-                  Close
-                </button>
+                <>
+                  {selectedApplication.rawStatus === "approved" ? (
+                    <button
+                      style={{
+                        ...styles.secondaryButton,
+                        opacity: sendingApprovalEmail ? 0.6 : 1,
+                      }}
+                      onClick={() => void sendSelectedApprovalEmail()}
+                      disabled={sendingApprovalEmail}
+                    >
+                      <Mail size={18} />
+                      {sendingApprovalEmail
+                        ? "Sending email..."
+                        : "Send approval email"}
+                    </button>
+                  ) : null}
+                  <button
+                    style={
+                      styles.cancelButton
+                    }
+                    onClick={() =>
+                      setSelectedId(
+                        null
+                      )
+                    }
+                  >
+                    Close
+                  </button>
+                </>
               )}
             </div>
           </div>
