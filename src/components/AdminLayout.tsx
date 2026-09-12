@@ -78,6 +78,8 @@ export default function AdminLayout() {
 
   const [isLoggingOut, setIsLoggingOut] =
     useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] =
+    useState(false);
 
   const [dashboardSummary, setDashboardSummary] =
     useState<AdminDashboardSummary | null>(null);
@@ -233,11 +235,7 @@ export default function AdminLayout() {
     "System Administrator";
 
   const handleLogout = async () => {
-    const confirmed = window.confirm(
-      "Are you sure you want to log out of the Admin Portal?"
-    );
-
-    if (!confirmed) {
+    if (isLoggingOut) {
       return;
     }
 
@@ -245,6 +243,8 @@ export default function AdminLayout() {
       setIsLoggingOut(true);
 
       await signOut();
+
+      setLogoutConfirmOpen(false);
 
       navigate("/login", {
         replace: true,
@@ -386,7 +386,7 @@ export default function AdminLayout() {
           <button
             type="button"
             className="logout-button"
-            onClick={handleLogout}
+            onClick={() => setLogoutConfirmOpen(true)}
             disabled={isLoggingOut}
           >
             <LogOut size={18} />
@@ -613,6 +613,66 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      {logoutConfirmOpen && (
+        <div
+          className="admin-logout-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !isLoggingOut
+            ) {
+              setLogoutConfirmOpen(false);
+            }
+          }}
+        >
+          <section
+            className="admin-logout-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-logout-title"
+          >
+            <div className="admin-logout-icon">
+              <LogOut size={24} />
+            </div>
+
+            <h2 id="admin-logout-title">
+              Log out of Admin Portal?
+            </h2>
+
+            <p>
+              You will need to sign in again to manage CargoTrackPH.
+            </p>
+
+            <div className="admin-logout-actions">
+              <button
+                type="button"
+                className="admin-logout-cancel"
+                onClick={() => setLogoutConfirmOpen(false)}
+                disabled={isLoggingOut}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="admin-logout-confirm"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? (
+                  <Loader2 size={18} className="spin" />
+                ) : (
+                  <LogOut size={18} />
+                )}
+
+                {isLoggingOut ? "Logging out..." : "Yes, log out"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

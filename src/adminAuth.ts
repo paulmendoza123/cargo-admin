@@ -172,7 +172,9 @@ export async function getAdminSession():
 
 export async function signOutAdmin() {
   const { error } =
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({
+      scope: "local",
+    });
 
   if (error) {
     throw new Error(
