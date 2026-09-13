@@ -936,8 +936,9 @@ export default function Users() {
                           }
                         />
                       ) : (
-                        <span className="identity-not-applicable">
-                          Business review
+                        <span className="identity-verification-badge verified">
+                          <CheckCircle2 size={13} />
+                          Verified
                         </span>
                       )}
                     </td>
@@ -1450,6 +1451,7 @@ function VerificationBadge({
   const className = status
     .toLowerCase()
     .replace(" ", "-");
+  const label = status === "Verified" ? "Approved" : status;
 
   return (
     <span className={`identity-verification-badge ${className}`}>
@@ -1457,7 +1459,7 @@ function VerificationBadge({
       {status === "Pending" && <Clock3 size={13} />}
       {status === "Rejected" && <XCircle size={13} />}
       {status === "Not Submitted" && <ImageIcon size={13} />}
-      {status}
+      {label}
     </span>
   );
 }
