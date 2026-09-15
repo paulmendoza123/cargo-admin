@@ -17,6 +17,8 @@ import Businesses from "./pages/Businesses";
 import Dashboard from "./pages/Dashboard";
 import Sponsored from "./pages/Sponsored";
 import Users from "./pages/Users";
+import AccountDeletion from "./pages/AccountDeletion";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 function AdminAccessLoader() {
   return (
@@ -79,6 +81,16 @@ export default function App() {
     <AdminAuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route
+            path="/privacy"
+            element={<PrivacyPolicy />}
+          />
+
+          <Route
+            path="/delete-account"
+            element={<AccountDeletion />}
+          />
+
           <Route
             path="/login"
             element={<AdminLogin />}
