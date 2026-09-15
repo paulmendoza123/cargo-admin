@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import "./LegalPages.css";
 
-const SUPPORT_EMAIL = "cargotrackph.admin@gmail.com";
+const SUPPORT_EMAIL = "cargotrackph.support@gmail.com";
 
 export default function PrivacyPolicy() {
   return (

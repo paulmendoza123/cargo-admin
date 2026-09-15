@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import "./LegalPages.css";
 
-const SUPPORT_EMAIL = "cargotrackph.admin@gmail.com";
+const SUPPORT_EMAIL = "cargotrackph.support@gmail.com";
 const REQUEST_SUBJECT = "CargoTrackPH account deletion request";
 const REQUEST_BODY = `Registered email:\nAccount type (Customer or Business):\nFull name / business name:\n\nI request deletion of my CargoTrackPH account.`;
 const REQUEST_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(REQUEST_SUBJECT)}&body=${encodeURIComponent(REQUEST_BODY)}`;
