@@ -22,6 +22,7 @@ import {
 import {
   requestAdminPasswordReset,
 } from "../adminAuth";
+import "./AdminLogin.css";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -134,14 +135,16 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="admin-login-page">
+    <div className="admin-login-page admin-login-v9">
       <section className="admin-login-brand-panel">
         <div className="admin-login-brand-content">
-          <img
-            src="/cargo.png"
-            alt="Cargo Track PH"
-            className="admin-login-logo"
-          />
+          <div className="admin-login-logo-shell">
+            <img
+              src="/cargo.png"
+              alt="Cargo Track PH"
+              className="admin-login-logo"
+            />
+          </div>
 
           <div className="admin-login-portal-badge">
             <ShieldCheck size={16} />
@@ -149,50 +152,33 @@ export default function AdminLogin() {
           </div>
 
           <h1>
-            Manage Cargo Track PH with
-            confidence.
+            CargoTrackPH Admin Portal
           </h1>
 
           <p>
-            Review cargo business applications,
-            manage users and companies, and verify
-            premium placement requests from one
-            secure workspace.
+            Secure access for authorized administrators
+            managing CargoTrackPH operations.
           </p>
-
-          <div className="admin-login-feature-list">
-            <div>
-              <CheckCircle2 size={17} />
-              Business application review
-            </div>
-
-            <div>
-              <CheckCircle2 size={17} />
-              User and company management
-            </div>
-
-            <div>
-              <CheckCircle2 size={17} />
-              Premium Listing payment verification
-            </div>
-          </div>
         </div>
 
         <div className="admin-login-brand-footer">
-          Secure administration environment
+          <span className="admin-login-status-dot" />
+          Protected CargoTrackPH administration workspace
         </div>
       </section>
 
       <section className="admin-login-form-panel">
         <div className="admin-login-card">
-          <div className="admin-login-icon">
-            <LockKeyhole size={25} />
-          </div>
+          <div className="admin-login-card-header">
+            <div className="admin-login-icon">
+              <LockKeyhole size={24} />
+            </div>
 
-          <div className="admin-login-eyebrow">
-            {recoveryMode
-              ? "ACCOUNT RECOVERY"
-              : "AUTHORIZED ACCESS"}
+            <div className="admin-login-eyebrow">
+              {recoveryMode
+                ? "ACCOUNT RECOVERY"
+                : "AUTHORIZED ACCESS"}
+            </div>
           </div>
 
           <h2>
@@ -390,6 +376,10 @@ export default function AdminLogin() {
           </form>
           )}
 
+          <div className="admin-login-card-footer">
+            <ShieldCheck size={15} />
+            Access is restricted to authorized CargoTrackPH administrators.
+          </div>
         </div>
       </section>
     </div>

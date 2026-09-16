@@ -18,6 +18,7 @@ import {
 import {
   useAdminAuth,
 } from "../contexts/AdminAuthContext";
+import "./AdminLogin.css";
 
 function isStrongAdminPassword(
   password: string
@@ -98,14 +99,16 @@ export default function AdminResetPassword() {
   };
 
   return (
-    <div className="admin-login-page">
+    <div className="admin-login-page admin-login-v9">
       <section className="admin-login-brand-panel">
         <div className="admin-login-brand-content">
-          <img
-            src="/cargo.png"
-            alt="Cargo Track PH"
-            className="admin-login-logo"
-          />
+          <div className="admin-login-logo-shell">
+            <img
+              src="/cargo.png"
+              alt="Cargo Track PH"
+              className="admin-login-logo"
+            />
+          </div>
 
           <div className="admin-login-portal-badge">
             <ShieldCheck size={16} />
@@ -113,7 +116,7 @@ export default function AdminResetPassword() {
           </div>
 
           <h1>
-            Protect administrator access.
+            Secure account recovery.
           </h1>
 
           <p>
@@ -123,22 +126,25 @@ export default function AdminResetPassword() {
         </div>
 
         <div className="admin-login-brand-footer">
-          Cargo Track PH administration environment
+          <span className="admin-login-status-dot" />
+          Protected CargoTrackPH administration workspace
         </div>
       </section>
 
       <section className="admin-login-form-panel">
         <div className="admin-login-card">
-          <div className="admin-login-icon">
-            {complete ? (
-              <CheckCircle2 size={25} />
-            ) : (
-              <KeyRound size={25} />
-            )}
-          </div>
+          <div className="admin-login-card-header">
+            <div className="admin-login-icon">
+              {complete ? (
+                <CheckCircle2 size={24} />
+              ) : (
+                <KeyRound size={24} />
+              )}
+            </div>
 
-          <div className="admin-login-eyebrow">
-            PASSWORD RECOVERY
+            <div className="admin-login-eyebrow">
+              PASSWORD RECOVERY
+            </div>
           </div>
 
           {complete ? (
@@ -287,6 +293,11 @@ export default function AdminResetPassword() {
               </form>
             </>
           )}
+
+          <div className="admin-login-card-footer">
+            <ShieldCheck size={15} />
+            Access is restricted to authorized CargoTrackPH administrators.
+          </div>
         </div>
       </section>
     </div>
